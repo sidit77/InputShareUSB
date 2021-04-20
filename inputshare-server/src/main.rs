@@ -17,8 +17,8 @@ fn main() {
     let addr = "127.0.0.1:12352";
     let mut socket = Socket::bind(addr).unwrap();
     let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
+    println!("running on {:?}", socket.local_addr().unwrap());
     let _thread = thread::spawn(move || socket.start_polling());
-
 
     loop {
         if let Ok(event) = receiver.recv() {
