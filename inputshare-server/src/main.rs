@@ -19,6 +19,7 @@ fn main() {
     let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
     let _thread = thread::spawn(move || socket.start_polling());
 
+    println!("running on {:?}", socket.local_addr().unwrap());
 
     loop {
         if let Ok(event) = receiver.recv() {

@@ -8,6 +8,7 @@ use crate::gui::SystemTray;
 use nwg::NativeUi;
 use laminar::{Socket, Packet};
 use std::time::Instant;
+use std::net::ToSocketAddrs;
 
 mod gui;
 mod inputhook;
@@ -26,7 +27,11 @@ fn main() {
     let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
     println!("Connected on {}", addr);
 
-    let server = SERVER.parse().unwrap();
+    let server = SERVER
+        .to_socket_addrs()
+        .expect("Unable to resolve domain")
+        .next()
+        .unwrap();
 
     let mut modifiers = HidModifierKeys::None;
     let mut pressed_keys = Vec::<HidScanCode>::new();
