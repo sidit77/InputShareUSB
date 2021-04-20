@@ -8,34 +8,30 @@ use crate::gui::SystemTray;
 use nwg::NativeUi;
 use laminar::{Socket, Packet};
 use std::time::Instant;
-use std::net::{ToSocketAddrs, SocketAddr};
+use std::net::{ToSocketAddrs};
 
 mod gui;
 mod inputhook;
 mod keys;
-
-const SERVER: &str = "raspberrypi.local:12351";
+mod config;
 
 fn main() {
     println!("Hello client!");
 
+    let cfg = config::Config::load();
+
     nwg::init().expect("Failed to init Native Windows GUI");
     let _ui = SystemTray::build_ui(Default::default()).expect("Failed to build UI");
 
-    let addr = "0.0.0.0:0";
-    let mut socket = Socket::bind(addr).unwrap();
-    let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
-    println!("Connected on {}", addr);
+    let mut socket = Socket::bind(&cfg.local_address).unwrap();
+    let (sender, _) = (socket.get_packet_sender(), socket.get_event_receiver());
+    println!("Connected on {}", socket.local_addr().unwrap());
 
-    let server = SERVER
+    let server = cfg.remote_address
         .to_socket_addrs()
         .expect("Unable to resolve domain")
-        .filter(|x| match x {
-            SocketAddr::V4(_) => true,
-            SocketAddr::V6(_) => false
-        })
         .next()
-        .unwrap();
+        .expect("Can not find suitable address!");
 
     println!("Connecting to {}", server);
 

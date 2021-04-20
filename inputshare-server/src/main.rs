@@ -1,14 +1,15 @@
+mod config;
+
 use laminar::{SocketEvent, Socket};
 use std::thread;
 use std::fs::{OpenOptions};
 use std::io::{Write};
 use std::env;
 
-//const SERVER: &str = "127.0.0.1:12351";
-
 fn main() {
     println!("Starting server!");
 
+    let cfg = config::Config::load();
     let mut file = match env::args().nth(1) {
         None => {
             println!("Using console as backend!");
@@ -24,8 +25,7 @@ fn main() {
         }
     };
 
-    let addr = "0.0.0.0:12351";
-    let mut socket = Socket::bind(addr).unwrap();
+    let mut socket = Socket::bind(&cfg.local_address).unwrap();
     let (_, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
     println!("Running on {:?}", socket.local_addr().unwrap());
     let _thread = thread::spawn(move || socket.start_polling());
