@@ -1,12 +1,26 @@
+use std::fs::read;
+use crate::inputhook::InputEvent;
+use crate::keys::VirtualKey;
+
 mod gui;
 mod inputhook;
+mod keys;
 
 //const SERVER: &str = "127.0.0.1:12351";
 
 fn main() {
     println!("Hello client!");
 
-    inputhook::set_up_keyboard_hook();
+    inputhook::set_up_keyboard_hook(|event|{
+        match event {
+            InputEvent::KeyboardEvent(key, scancode, state) => {
+                match key {
+                    VirtualKey::KeyA => false,
+                    _ => true
+                }
+            }
+        }
+    });
 
     gui::run();
 
