@@ -1,23 +1,33 @@
-use laminar::{SocketEvent, Socket, Packet};
+use laminar::{SocketEvent, Socket};
 use std::thread;
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::fs::{OpenOptions};
+use std::io::{Write};
+use std::env;
 
 //const SERVER: &str = "127.0.0.1:12351";
 
 fn main() {
-    println!("Hello server!");
+    println!("Starting server!");
 
-    let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .open("/dev/hidg0")
-        .expect("can not open device!");
+    let mut file = match env::args().nth(1) {
+        None => {
+            println!("Using console as backend!");
+            None
+        },
+        Some(path) => {
+            println!("Writing into {}", &path);
+            Some(OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(path)
+                .expect("can not open device!"))
+        }
+    };
 
     let addr = "0.0.0.0:12351";
     let mut socket = Socket::bind(addr).unwrap();
-    let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
-    println!("running on {:?}", socket.local_addr().unwrap());
+    let (_, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
+    println!("Running on {:?}", socket.local_addr().unwrap());
     let _thread = thread::spawn(move || socket.start_polling());
 
     loop {
@@ -33,9 +43,13 @@ fn main() {
                     //let msg = String::from_utf8_lossy(msg);
                     let ip = packet.addr().ip();
 
-                    println!("Received {:?} from {:?}", &msg, ip);
-
-                    file.write(&msg);
+                    match file.as_mut() {
+                        None => println!("Received {:?} from {:?}", msg, ip),
+                        Some(device) => match device.write(msg) {
+                            Ok(_) => {},
+                            Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", msg, device, e)
+                        }
+                    }
 
                     //sender
                     //    .send(Packet::reliable_unordered(
