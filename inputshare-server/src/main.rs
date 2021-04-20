@@ -14,7 +14,7 @@ fn main() {
         .open("/dev/hidg0")
         .expect("can not open device!");
 
-    let addr = "127.0.0.1:12352";
+    let addr = "0.0.0.0:12351";
     let mut socket = Socket::bind(addr).unwrap();
     let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
     println!("running on {:?}", socket.local_addr().unwrap());
@@ -33,9 +33,9 @@ fn main() {
                     //let msg = String::from_utf8_lossy(msg);
                     let ip = packet.addr().ip();
 
-                    println!("Received {:?} from {:?}", msg, ip);
+                    println!("Received {:?} from {:?}", &msg, ip);
 
-                    file.write(packet.payload());
+                    file.write(&msg);
 
                     //sender
                     //    .send(Packet::reliable_unordered(
