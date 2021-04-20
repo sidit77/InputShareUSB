@@ -1,17 +1,32 @@
 #[macro_use]
 extern crate bitflags;
+extern crate native_windows_gui as nwg;
 
 use crate::inputhook::InputEvent;
 use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode};
+use crate::gui::SystemTray;
+use nwg::NativeUi;
+use laminar::{Socket, Packet};
+use std::time::Instant;
 
 mod gui;
 mod inputhook;
 mod keys;
 
-//const SERVER: &str = "127.0.0.1:12351";
+const SERVER: &str = "raspberrypi.local:12351";
 
 fn main() {
     println!("Hello client!");
+
+    nwg::init().expect("Failed to init Native Windows GUI");
+    let _ui = SystemTray::build_ui(Default::default()).expect("Failed to build UI");
+
+    let addr = "127.0.0.1:12352";
+    let mut socket = Socket::bind(addr).unwrap();
+    let (sender, receiver) = (socket.get_packet_sender(), socket.get_event_receiver());
+    println!("Connected on {}", addr);
+
+    let server = SERVER.parse().unwrap();
 
     let mut modifiers = HidModifierKeys::None;
     let mut pressed_keys = Vec::<HidScanCode>::new();
@@ -57,7 +72,8 @@ fn main() {
                     for i in 0..pressed_keys.len().min(6){
                         packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i];
                     }
-                    println!("{:x?}", packet);
+                    //println!("{:x?}", packet);
+                    sender.send(Packet::reliable_unordered(server, Vec::from(packet))).unwrap();
                     //println!("{:?} - {:x?}", modifiers, pressed_keys);
                 }
 
@@ -66,7 +82,10 @@ fn main() {
         }
     });
 
-    gui::run();
+
+    nwg::dispatch_thread_events_with_callback(move ||{
+        socket.manual_poll(Instant::now());
+    });
 
     inputhook::release_hook();
 /*
