@@ -10,8 +10,7 @@ fn main() {
 
     gui::run();
 
-    inputhook::remove_keyboard_hook();
-
+    inputhook::release_hook();
 /*
     let addr = "127.0.0.1:12352";
     let mut socket = Socket::bind(addr).unwrap();
