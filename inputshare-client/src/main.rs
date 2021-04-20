@@ -8,7 +8,7 @@ use crate::gui::SystemTray;
 use nwg::NativeUi;
 use laminar::{Socket, Packet};
 use std::time::Instant;
-use std::net::{ToSocketAddrs};
+use std::net::{ToSocketAddrs, SocketAddr};
 
 mod gui;
 mod inputhook;
@@ -30,6 +30,10 @@ fn main() {
     let server = cfg.remote_address
         .to_socket_addrs()
         .expect("Unable to resolve domain")
+        .filter(|x|match x {
+            SocketAddr::V4(_) => true,
+            SocketAddr::V6(_) => false
+        })
         .next()
         .expect("Can not find suitable address!");
 
@@ -79,7 +83,7 @@ fn main() {
                     for i in 0..pressed_keys.len().min(6){
                         packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i];
                     }
-                    println!("{:x?}", packet);
+                    //println!("{:x?}", packet);
                     sender.send(Packet::reliable_unordered(server, Vec::from(packet))).unwrap();
                     //println!("{:?} - {:x?}", modifiers, pressed_keys);
                 }
