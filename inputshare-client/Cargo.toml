@@ -9,5 +9,6 @@ edition = "2018"
 [dependencies]
 laminar = "0.4.0"
 anyhow = "1.0.40"
+bitflags = "1.2.1"
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef"] }
 native-windows-gui = "1.0.11"

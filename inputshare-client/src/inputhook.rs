@@ -77,7 +77,7 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
         let event = InputEvent::KeyboardEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
 
-        println!("{:?} {:?} ({:x?})", parse_key_state(wparam as u32), parse_virtual_key(&key_struct) ,parse_scancode(&key_struct));
+        //println!("{:?} {:?} ({:x?})", parse_key_state(wparam as u32), parse_virtual_key(&key_struct) ,parse_scancode(&key_struct));
 
         //if(!keyCallback(KeyEventArgs(
         //    static_cast<VirtualKey>(keyStruct->vkCode),

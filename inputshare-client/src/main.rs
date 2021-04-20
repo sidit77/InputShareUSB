@@ -1,6 +1,8 @@
-use std::fs::read;
+#[macro_use]
+extern crate bitflags;
+
 use crate::inputhook::InputEvent;
-use crate::keys::VirtualKey;
+use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode};
 
 mod gui;
 mod inputhook;
@@ -11,13 +13,55 @@ mod keys;
 fn main() {
     println!("Hello client!");
 
-    inputhook::set_up_keyboard_hook(|event|{
+    let mut modifiers = HidModifierKeys::None;
+    let mut pressed_keys = Vec::<HidScanCode>::new();
+    inputhook::set_up_keyboard_hook(move |event|{
         match event {
             InputEvent::KeyboardEvent(key, scancode, state) => {
-                match key {
-                    VirtualKey::KeyA => false,
-                    _ => true
+                let fresh = match HidModifierKeys::from_virtual_key(&key) {
+                    Some(m) => {
+                        let old = modifiers;
+                        match state {
+                            KeyState::Pressed => modifiers.insert(m),
+                            KeyState::Released => modifiers.remove(m)
+                        }
+                        modifiers != old
+                    }
+                    None => match convert_win2hid(&scancode) {
+                        Some(hid) => match state {
+                            KeyState::Pressed => match pressed_keys.contains(&hid) {
+                                false => {
+                                    pressed_keys.push(hid);
+                                    true
+                                },
+                                true => false
+                            }
+                            KeyState::Released => match pressed_keys.iter().position(|x| *x == hid) {
+                                Some(index) => {
+                                    pressed_keys.remove(index);
+                                    true
+                                },
+                                None => false
+                            }
+                        }
+                        None => {
+                            println!("Unsupported key: {:?} ({:x?})", key, scancode);
+                            false
+                        }
+                    }
+                };
+
+                if fresh{
+                    let mut packet: [u8; 8] = [0; 8];
+                    packet[0] = modifiers.to_byte();
+                    for i in 0..pressed_keys.len().min(6){
+                        packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i];
+                    }
+                    println!("{:x?}", packet);
+                    //println!("{:?} - {:x?}", modifiers, pressed_keys);
                 }
+
+                false
             }
         }
     });
