@@ -3,21 +3,74 @@ extern crate bitflags;
 extern crate native_windows_gui as nwg;
 
 use crate::inputhook::InputEvent;
-use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode};
+use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey};
 use crate::gui::SystemTray;
 use nwg::NativeUi;
 use laminar::{Socket, Packet};
 use std::time::Instant;
 use std::net::{ToSocketAddrs, SocketAddr};
+use crate::hookv2::{Processor};
+use std::ops::{Deref, DerefMut};
 
 mod gui;
 mod inputhook;
 mod keys;
 mod config;
+mod hookv2;
 
 fn main() {
     println!("Hello client!");
 
+    {
+        //let mut counter = 0;
+        //let _hook = hookv2::InputHook::create(|event| match event{
+        //    InputEvent::KeyboardEvent(key, _, state) => match state {
+        //        KeyState::Pressed => {
+        //            counter += 1;
+        //            println!("{} buttons pressed", counter);
+        //            //if matches!(key, VirtualKey::Escape) {
+        //            //    nwg::stop_thread_dispatch();
+        //            //}
+        //            true
+        //        },
+        //        KeyState::Released => true
+        //    }
+        //});
+        //nwg::dispatch_thread_events();
+        let mut a = 0;
+        let mut b = 0;
+        {
+            let _p1 = Processor::new(|| {
+                a += 1;
+                println!("1: I was called {} times!", &a);
+            });
+
+            println!("== START 1 ==");
+            nwg::dispatch_thread_events();
+            println!("== END 1 ==");
+
+            {
+                let _p2 = Processor::new(|| {
+                    b += 1;
+                    println!("2: I was called {} times!", &b);
+                });
+
+                println!("== START 2 ==");
+                nwg::dispatch_thread_events();
+                println!("== END 2 ==");
+            }
+            //(&mut *p.callback.borrow_mut())();
+            //(p.callback.deref().borrow_mut().deref_mut())();
+
+            println!("== START 3 ==");
+            nwg::dispatch_thread_events();
+            println!("== END 3 ==");
+        }
+        println!("counter {}, {}", a, b);
+    }
+
+    println!("Goodbye client!");
+    return;
     let cfg = config::Config::load();
 
     nwg::init().expect("Failed to init Native Windows GUI");
