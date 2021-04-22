@@ -33,6 +33,19 @@ impl HidModifierKeys {
         }
     }
 
+    pub fn to_virtual_keys(&self) -> Vec<VirtualKey> {
+        let mut v = Vec::new();
+        if self.contains(HidModifierKeys::LShift){ v.push(VirtualKey::LShift); }
+        if self.contains(HidModifierKeys::LCtrl ){ v.push(VirtualKey::LControl); }
+        if self.contains(HidModifierKeys::LMeta ){ v.push(VirtualKey::LWin); }
+        if self.contains(HidModifierKeys::LAlt  ){ v.push(VirtualKey::LMenu); }
+        if self.contains(HidModifierKeys::RShift){ v.push(VirtualKey::RShift); }
+        if self.contains(HidModifierKeys::RCtrl ){ v.push(VirtualKey::RControl); }
+        if self.contains(HidModifierKeys::RMeta ){ v.push(VirtualKey::RWin); }
+        if self.contains(HidModifierKeys::RAlt  ){ v.push(VirtualKey::RMenu); }
+        v
+    }
+
     pub fn to_byte(&self) -> u8 {
         self.bits
     }

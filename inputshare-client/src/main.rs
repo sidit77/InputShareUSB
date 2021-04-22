@@ -2,19 +2,19 @@
 extern crate bitflags;
 extern crate native_windows_gui as nwg;
 
-use crate::inputhook::InputEvent;
 use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey};
 use crate::gui::SystemTray;
 use nwg::NativeUi;
 use std::time::Duration;
 use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
 use std::io::{Write, Read};
+use crate::hook::InputEvent;
+use crate::send::Input;
 
 mod gui;
-mod inputhook;
 mod keys;
 mod config;
-mod hookv2;
+mod hook;
 mod send;
 
 fn main(){
@@ -85,9 +85,9 @@ fn read_string(stream: &mut TcpStream, data: &mut [u8]) -> anyhow::Result<String
 
 fn run(stream: &mut TcpStream) {
     let mut modifiers = HidModifierKeys::None;
-    let mut pressed_keys = Vec::<HidScanCode>::new();
+    let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
     let mut captured = true;
-    let _hook = hookv2::InputHook::new(|event|{
+    let _hook = hook::InputHook::new(|event|{
         match event {
             InputEvent::KeyboardEvent(key, scancode, state) => {
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
@@ -101,14 +101,14 @@ fn run(stream: &mut TcpStream) {
                     }
                     None => match convert_win2hid(&scancode) {
                         Some(hid) => match state {
-                            KeyState::Pressed => match pressed_keys.contains(&hid) {
-                                false => {
-                                    pressed_keys.push(hid);
+                            KeyState::Pressed => match pressed_keys.iter().position(|(_, x)| *x == hid) {
+                                None => {
+                                    pressed_keys.push((key, hid));
                                     true
                                 },
-                                true => false
+                                Some(_) => false
                             }
-                            KeyState::Released => match pressed_keys.iter().position(|x| *x == hid) {
+                            KeyState::Released => match pressed_keys.iter().position(|(_, x)| *x == hid) {
                                 Some(index) => {
                                     pressed_keys.remove(index);
                                     true
@@ -123,19 +123,20 @@ fn run(stream: &mut TcpStream) {
                     }
                 };
 
-                if fresh && matches!(key, keys::VirtualKey::RShift) && matches!(state, keys::KeyState::Pressed){
-                    send::send_keys([
-                        send::Input::KeyboardInput(VirtualKey::KeyA, KeyState::Pressed),
-                        send::Input::KeyboardInput(VirtualKey::KeyA, KeyState::Released),
-                        send::Input::StringInput("ber, das ist neu".to_string()),
-                        send::Input::KeyboardInput(VirtualKey::Return, KeyState::Pressed),
-                        send::Input::KeyboardInput(VirtualKey::Return, KeyState::Released)
-                        ].iter());
-                }
-                if fresh && matches!(key, keys::VirtualKey::Apps) && matches!(state, keys::KeyState::Pressed){
+                if fresh && matches!(key, VirtualKey::Apps) && matches!(state, KeyState::Pressed){
+                    pressed_keys.retain(|(k, _)|!matches!(k, VirtualKey::Apps));
                     captured = !captured;
                     println!("Captured: {}", captured);
-                    send::send_keys([send::Input::KeyboardInput(VirtualKey::Return, KeyState::Pressed)].iter());
+                    let mut k = modifiers.to_virtual_keys();
+                    k.extend(pressed_keys.iter().map(|(x, _)|x));
+                    if captured {
+                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Released)).collect();
+                        send::send_keys(k.iter()).expect("could not send all keys");
+                    } else {
+                        stream.write_all(&[0; 8]).expect("Error sending packet");
+                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Pressed)).collect();
+                        send::send_keys(k.iter()).expect("could not send all keys");
+                    }
                     return false;
                 }
 
@@ -144,7 +145,7 @@ fn run(stream: &mut TcpStream) {
                         let mut packet: [u8; 8] = [0; 8];
                         packet[0] = modifiers.to_byte();
                         for i in 0..pressed_keys.len().min(6) {
-                            packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i];
+                            packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i].1;
                         }
                         //println!("{:x?}", packet);
                         //sender.send(Packet::reliable_unordered(server, Vec::from(packet))).unwrap();
