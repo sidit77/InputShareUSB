@@ -71,23 +71,28 @@ impl<'a> Drop for InputHook<'a> {
     }
 }
 
+const IGNORE: usize = 0x1234567;
+
 unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     CALLBACKS.retain(|x| !matches!(x.upgrade(), None));
 
     if code >= 0 {
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
-        let event = InputEvent::KeyboardEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
 
-        let keep = CALLBACKS
-            .iter_mut()
-            .map(|x| match x.upgrade() {
-                None => true,
-                Some(y) => (y.deref().borrow_mut().deref_mut())(event.clone())
-            })
-            .fold(true, |a, b| a && b);
+        if key_struct.dwExtraInfo != IGNORE {
+            let event = InputEvent::KeyboardEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
 
-        if !keep {
-            return 1;
+            let keep = CALLBACKS
+                .iter_mut()
+                .map(|x| match x.upgrade() {
+                    None => true,
+                    Some(y) => (y.deref().borrow_mut().deref_mut())(event.clone())
+                })
+                .fold(true, |a, b| a && b);
+
+            if !keep {
+                return 1;
+            }
         }
 
     }
