@@ -1,10 +1,10 @@
 use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE};
 use crate::keys::{VirtualKey, KeyState};
 use std::mem;
-use winapi::shared::minwindef::DWORD;
 
 const IGNORE: usize = 0x1234567;
 
+#[allow(dead_code)]
 pub enum Input {
     KeyboardInput(VirtualKey, KeyState),
     StringInput(String)
@@ -62,15 +62,18 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
     }
 }
 
-pub fn send_keys<'a>(inputs: impl Iterator<Item=&'a Input>) {
+pub fn send_keys<'a>(inputs: impl Iterator<Item=&'a Input>) -> anyhow::Result<()>{
     let mut ia: Vec<INPUT> = inputs.fold(Vec::new(), |mut v, i|{v.add(i); v});
-    unsafe {
-        winapi::um::winuser::SendInput(ia.len() as u32, ia.as_mut_ptr(), mem::size_of::<INPUT>() as i32);
+    let c = unsafe {winapi::um::winuser::SendInput(ia.len() as u32, ia.as_mut_ptr(), mem::size_of::<INPUT>() as i32)};
+    match ia.len() == c as usize {
+        true => Ok(()),
+        false => anyhow::bail!("Count not inject all inputs!")
     }
 }
 
-pub fn send_key(input: &Input) {
-    send_keys(std::iter::once(input));
+#[allow(dead_code)]
+pub fn send_key(input: &Input) -> anyhow::Result<()> {
+    send_keys(std::iter::once(input))
 }
 
 
