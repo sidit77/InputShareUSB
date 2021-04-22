@@ -7,6 +7,7 @@ use winapi::shared::windef::HHOOK;
 use std::ptr::null;
 use crate::keys::{WindowsScanCode, VirtualKey, KeyState};
 
+#[derive(Copy, Clone)]
 pub enum InputEvent {
     KeyboardEvent(VirtualKey, WindowsScanCode, KeyState)
 }

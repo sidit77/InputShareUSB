@@ -9,7 +9,7 @@ use nwg::NativeUi;
 use laminar::{Socket, Packet};
 use std::time::Instant;
 use std::net::{ToSocketAddrs, SocketAddr};
-use crate::hookv2::{Processor};
+use crate::hookv2::{InputHook};
 use std::ops::{Deref, DerefMut};
 
 mod gui;
@@ -40,9 +40,10 @@ fn main() {
         let mut a = 0;
         let mut b = 0;
         {
-            let _p1 = Processor::new(|| {
+            let _p1 = InputHook::new(|event| {
                 a += 1;
                 println!("1: I was called {} times!", &a);
+                return true;
             });
 
             println!("== START 1 ==");
@@ -50,9 +51,10 @@ fn main() {
             println!("== END 1 ==");
 
             {
-                let _p2 = Processor::new(|| {
+                let _p2 = InputHook::new(|event| {
                     b += 1;
                     println!("2: I was called {} times!", &b);
+                    return false;
                 });
 
                 println!("== START 2 ==");

@@ -39,13 +39,13 @@ impl HidModifierKeys {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum KeyState {
     Pressed, Released
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[repr(u32)]
 pub enum VirtualKey {
     LButton                      = 0x01,
