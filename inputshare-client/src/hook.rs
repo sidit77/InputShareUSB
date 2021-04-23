@@ -1,4 +1,4 @@
-use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP};
+use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::shared::windef::HHOOK;
 use crate::keys::{KeyState, VirtualKey, WindowsScanCode};
@@ -9,31 +9,40 @@ use std::rc::{Rc, Weak};
 use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum InputEvent {
-    KeyboardEvent(VirtualKey, WindowsScanCode, KeyState)
+    KeyboardKeyEvent(VirtualKey, WindowsScanCode, KeyState),
+    MouseButtonEvent(VirtualKey, KeyState),
+    MouseWheelEvent(f32, f32),
+    MouseMoveEvent(i32, i32)
 }
 
 static mut NATIVE_HOOK: Option<NativeHook> = None;
 
 struct NativeHook {
-    keyboard: HHOOK
+    keyboard: HHOOK,
+    mouse: HHOOK
 }
 
 impl NativeHook {
     unsafe fn register() -> Self{
         let handle = GetModuleHandleW(null());
         let keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0);
+        let mouse    = SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), handle, 0);
         println!("Registered native hooks!");
         Self {
-            keyboard
+            keyboard,
+            mouse
         }
     }
 }
 
 impl Drop for NativeHook {
     fn drop(&mut self) {
-        unsafe { UnhookWindowsHookEx(self.keyboard); }
+        unsafe {
+            UnhookWindowsHookEx(self.keyboard);
+            UnhookWindowsHookEx(self.mouse);
+        }
         println!("Unregistered native hooks!");
     }
 }
@@ -83,17 +92,9 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
 
         if key_struct.dwExtraInfo != IGNORE {
-            let event = InputEvent::KeyboardEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
+            let event = InputEvent::KeyboardKeyEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
 
-            let keep = CALLBACKS
-                .iter_mut()
-                .map(|x| match x.upgrade() {
-                    None => true,
-                    Some(y) => (y.deref().borrow_mut().deref_mut())(event.clone())
-                })
-                .fold(true, |a, b| a && b);
-
-            if !keep {
+            if !for_all(event) {
                 return 1;
             }
         }
@@ -102,6 +103,64 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
     CallNextHookEx(NATIVE_HOOK.as_ref().unwrap().keyboard, code, wparam, lparam)
 }
 
+unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    CALLBACKS.retain(|x| !matches!(x.upgrade(), None));
+
+    if code >= 0 {
+        let key_struct = *(lparam as *const MSLLHOOKSTRUCT);
+
+        if key_struct.dwExtraInfo != IGNORE {
+            let event = match wparam as u32{
+                winapi::um::winuser::WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
+                winapi::um::winuser::WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),
+                winapi::um::winuser::WM_RBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Pressed)),
+                winapi::um::winuser::WM_RBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Released)),
+                winapi::um::winuser::WM_MBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Pressed)),
+                winapi::um::winuser::WM_MBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Released)),
+                winapi::um::winuser::WM_XBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
+                winapi::um::winuser::WM_XBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
+                winapi::um::winuser::WM_NCXBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
+                winapi::um::winuser::WM_NCXBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
+                winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.x)),
+                winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(parse_wheel_delta(&key_struct),0.0)),
+                winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(0.0, parse_wheel_delta(&key_struct))),
+                _ => {println!("Unknown: {}", wparam); None}
+            };
+
+            if let Some(event) = event {
+                if !for_all(event) {
+                    return 1;
+                }
+            }
+        }
+
+
+    }
+
+    CallNextHookEx(NATIVE_HOOK.as_ref().unwrap().mouse, code, wparam, lparam)
+}
+
+unsafe fn for_all(event: InputEvent) -> bool {
+    CALLBACKS
+        .iter_mut()
+        .map(|x| match x.upgrade() {
+            None => true,
+            Some(y) => (y.deref().borrow_mut().deref_mut())(event.clone())
+        })
+        .fold(true, |a, b| a && b)
+}
+
+fn parse_wheel_delta(key_struct: &MSLLHOOKSTRUCT) -> f32{
+    (key_struct.mouseData >> 16) as i16 as f32 / winapi::um::winuser::WHEEL_DELTA as f32
+}
+
+fn parse_xbutton(key_struct: &MSLLHOOKSTRUCT) -> Option<VirtualKey>{
+    match (key_struct.mouseData >> 16) as u16 {
+        winapi::um::winuser::XBUTTON1 => Some(VirtualKey::XButton1),
+        winapi::um::winuser::XBUTTON2 => Some(VirtualKey::XButton2),
+        _ => None
+    }
+}
 
 fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
     let mut scancode = key_struct.scanCode as WindowsScanCode;

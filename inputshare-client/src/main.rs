@@ -89,7 +89,7 @@ fn run(stream: &mut TcpStream) {
     let mut captured = true;
     let _hook = hook::InputHook::new(|event|{
         match event {
-            InputEvent::KeyboardEvent(key, scancode, state) => {
+            InputEvent::KeyboardKeyEvent(key, scancode, state) => {
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
                     Some(m) => {
                         let old = modifiers;
@@ -158,6 +158,9 @@ fn run(stream: &mut TcpStream) {
                 }
 
             }
+            InputEvent::MouseButtonEvent(_, _) => !captured,
+            InputEvent::MouseWheelEvent(_, _) => !captured,
+            InputEvent::MouseMoveEvent(_, _) => !captured
         }
     });
 
