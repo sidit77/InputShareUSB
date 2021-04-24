@@ -1,4 +1,4 @@
-use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE};
+use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, GetSystemMetrics};
 use crate::keys::{VirtualKey, KeyState, ScrollDirection};
 use std::mem;
 
@@ -11,7 +11,8 @@ pub enum Input<'a> {
     StringInput(&'a str),
     MouseButtonInput(VirtualKey, KeyState),
     MouseScrollInput(ScrollDirection),
-    RelativeMouseMoveInput(i32, i32)
+    RelativeMouseMoveInput(i32, i32),
+    AbsoluteMouseMoveInput(i32, i32)
 }
 
 trait AddInputs{
@@ -103,7 +104,23 @@ impl AddInputs for Vec<INPUT> {
                     dwExtraInfo: IGNORE
                 }))
             }
+            Input::AbsoluteMouseMoveInput(x, y) => {
+                self.push(create_mouse_input(MOUSEINPUT{
+                    dx: x * 65536 / system_metric(0),
+                    dy: y * 65536 / system_metric(1),
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+                    time: 0,
+                    dwExtraInfo: IGNORE
+                }))
+            }
         }
+    }
+}
+
+fn system_metric(index: i32) -> i32{
+    unsafe {
+        GetSystemMetrics(index)
     }
 }
 

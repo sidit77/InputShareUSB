@@ -139,12 +139,6 @@ fn run(stream: &mut TcpStream) {
                     }
                 };
 
-                if fresh && matches!(key, VirtualKey::LShift) && matches!(state, KeyState::Pressed) {
-                    send::send_keys([
-                        Input::RelativeMouseMoveInput(0, 40)
-                    ].iter()).expect("send");
-                }
-
                 if fresh && matches!(key, VirtualKey::Apps) && matches!(state, KeyState::Pressed){
                     pressed_keys.retain(|(k, _)|!matches!(k, VirtualKey::Apps));
                     captured = !captured;
