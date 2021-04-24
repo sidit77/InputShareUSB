@@ -2,7 +2,6 @@ mod config;
 
 use std::fs::{OpenOptions};
 use std::io::{Write, Read};
-use std::env;
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown};
 
@@ -25,20 +24,26 @@ fn main(){
     println!("Starting server!");
 
     let cfg = config::Config::load();
-    let mut file = match env::args().nth(1) {
-        None => {
-            println!("Using console as backend!");
-            None
-        },
-        Some(path) => {
-            println!("Writing into {}", &path);
-            Some(OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open(path)
-                .expect("can not open device!"))
-        }
-    };
+
+    let mut kbfile = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open("/dev/hidg0")
+        .ok();
+
+    let mut msfile = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open("/dev/hidg1")
+        .ok();
+
+    if kbfile.is_none(){
+        println!("Writing keyboard into console!");
+    }
+
+    if msfile.is_none(){
+        println!("Writing mouse into console!");
+    }
 
     //run(Transport::FramedTcp, "0.0.0.0:12345".to_socket_addrs().unwrap().next().unwrap())
     let listener = TcpListener::bind(&cfg.local_address).unwrap();
@@ -63,14 +68,14 @@ fn main(){
                                     let msg = &data[1..size];
 
                                     match PacketType::from_id(data[0]).expect("Unknown packet type") {
-                                        PacketType::Keyboard => match file.as_mut() {
+                                        PacketType::Keyboard => match kbfile.as_mut() {
                                             None => println!("Received Keyboard:{:?} from {:?}", &msg, &addr),
                                             Some(device) => match device.write(&msg) {
                                                 Ok(_) => {},
                                                 Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
                                             }
                                         }
-                                        PacketType::Mouse => match file.as_mut() {
+                                        PacketType::Mouse => match msfile.as_mut() {
                                             None => println!("Received Mouse:{:?} from {:?}", &msg, &addr),
                                             Some(device) => match device.write(&msg) {
                                                 Ok(_) => {},
