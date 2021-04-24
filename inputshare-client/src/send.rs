@@ -1,4 +1,4 @@
-use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA};
+use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE};
 use crate::keys::{VirtualKey, KeyState, ScrollDirection};
 use std::mem;
 
@@ -10,7 +10,8 @@ pub enum Input<'a> {
     KeyboardKeyInput(VirtualKey, KeyState),
     StringInput(&'a str),
     MouseButtonInput(VirtualKey, KeyState),
-    MouseScrollInput(ScrollDirection)
+    MouseScrollInput(ScrollDirection),
+    RelativeMouseMoveInput(i32, i32)
 }
 
 trait AddInputs{
@@ -91,6 +92,16 @@ impl AddInputs for Vec<INPUT> {
                     time: 0,
                     dwExtraInfo: IGNORE
                 }));
+            }
+            Input::RelativeMouseMoveInput(dx, dy) => {
+                self.push(create_mouse_input(MOUSEINPUT{
+                    dx: *dx,
+                    dy: *dy,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE,
+                    time: 0,
+                    dwExtraInfo: IGNORE
+                }))
             }
         }
     }

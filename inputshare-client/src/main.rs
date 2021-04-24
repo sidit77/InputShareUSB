@@ -141,7 +141,7 @@ fn run(stream: &mut TcpStream) {
 
                 if fresh && matches!(key, VirtualKey::LShift) && matches!(state, KeyState::Pressed) {
                     send::send_keys([
-                        Input::MouseScrollInput(ScrollDirection::Vertical(-2.0))
+                        Input::RelativeMouseMoveInput(0, 40)
                     ].iter()).expect("send");
                 }
 
