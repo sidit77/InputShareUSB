@@ -2,7 +2,7 @@
 extern crate bitflags;
 extern crate native_windows_gui as nwg;
 
-use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey};
+use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey, HidMouseButtons};
 use crate::gui::SystemTray;
 use nwg::NativeUi;
 use std::time::Duration;
@@ -85,8 +85,9 @@ fn read_string(stream: &mut TcpStream, data: &mut [u8]) -> anyhow::Result<String
 
 fn run(stream: &mut TcpStream) {
     let mut modifiers = HidModifierKeys::None;
+    let mut pressed_buttons = HidMouseButtons::None;
     let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
-    let mut captured = true;
+    let mut captured = false;
     let _hook = hook::InputHook::new(|event|{
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
@@ -133,7 +134,8 @@ fn run(stream: &mut TcpStream) {
                         let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Released)).collect();
                         send::send_keys(k.iter()).expect("could not send all keys");
                     } else {
-                        stream.write_all(&[0; 8]).expect("Error sending packet");
+                        stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
+                        stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
                         let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Pressed)).collect();
                         send::send_keys(k.iter()).expect("could not send all keys");
                     }
@@ -142,14 +144,9 @@ fn run(stream: &mut TcpStream) {
 
                 if captured {
                     if fresh {
-                        let mut packet: [u8; 8] = [0; 8];
-                        packet[0] = modifiers.to_byte();
-                        for i in 0..pressed_keys.len().min(6) {
-                            packet[2 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i].1;
-                        }
                         //println!("{:x?}", packet);
                         //sender.send(Packet::reliable_unordered(server, Vec::from(packet))).unwrap();
-                        stream.write_all(&packet).expect("Error sending packet");
+                        stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
                         //println!("{:?} - {:x?}", modifiers, pressed_keys);
                     }
                     false
@@ -158,7 +155,20 @@ fn run(stream: &mut TcpStream) {
                 }
 
             }
-            InputEvent::MouseButtonEvent(_, _) => !captured,
+            InputEvent::MouseButtonEvent(key, state) => {
+                match HidMouseButtons::from_virtual_key(&key){
+                    Some(mb) => match state {
+                        KeyState::Pressed => pressed_buttons.insert(mb),
+                        KeyState::Released => pressed_buttons.remove(mb),
+                    }
+                    None => println!("Unknown mouse button {:?}", key)
+                }
+                if captured {
+                    stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, 0, 0)).expect("Error sending packet");
+                }
+
+                !captured
+            },
             InputEvent::MouseWheelEvent(_, _) => !captured,
             InputEvent::MouseMoveEvent(_, _) => !captured
         }
@@ -170,6 +180,25 @@ fn run(stream: &mut TcpStream) {
     //    //socket.manual_poll(Instant::now());
     //    //receiver.try_recv();
     //});
+}
+
+fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanCode)>>) -> [u8; 9] {
+    let mut packet = [0x0 as u8; 9];
+    packet[0] = 0x1;
+    packet[1] = mods.to_byte();
+    if let Some(pressed_keys) = keys{
+        for i in 0..pressed_keys.len().min(6) {
+            packet[3 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i].1;
+        }
+    }
+    packet
+}
+
+fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 8] {
+    let mut packet = [0x0 as u8; 8];
+    packet[0] = 0x2;
+    packet[1] = buttons.to_byte();
+    packet
 }
 
 /*

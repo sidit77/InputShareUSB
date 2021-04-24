@@ -52,6 +52,45 @@ impl HidModifierKeys {
 }
 
 #[allow(dead_code)]
+bitflags! {
+    pub struct HidMouseButtons: u8 {
+        const None    = 0x00;
+        const LButton = 0x01;
+        const RButton = 0x02;
+        const MButton = 0x04;
+        const Button4 = 0x08;
+        const Button5 = 0x10;
+    }
+}
+
+impl HidMouseButtons {
+    pub fn from_virtual_key(key: &VirtualKey) -> Option<Self>{
+        match key {
+            VirtualKey::LButton  => Some(HidMouseButtons::LButton),
+            VirtualKey::RButton  => Some(HidMouseButtons::RButton),
+            VirtualKey::MButton  => Some(HidMouseButtons::MButton),
+            VirtualKey::XButton1 => Some(HidMouseButtons::Button4),
+            VirtualKey::XButton2 => Some(HidMouseButtons::Button5),
+            _                    => None
+        }
+    }
+
+    pub fn to_virtual_keys(&self) -> Vec<VirtualKey> {
+        let mut v = Vec::new();
+        if self.contains(HidMouseButtons::LButton){ v.push(VirtualKey::LButton); }
+        if self.contains(HidMouseButtons::RButton){ v.push(VirtualKey::RButton); }
+        if self.contains(HidMouseButtons::MButton){ v.push(VirtualKey::MButton); }
+        if self.contains(HidMouseButtons::Button4){ v.push(VirtualKey::XButton1); }
+        if self.contains(HidMouseButtons::Button5){ v.push(VirtualKey::XButton2); }
+        v
+    }
+
+    pub fn to_byte(&self) -> u8 {
+        self.bits
+    }
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum KeyState {
     Pressed, Released

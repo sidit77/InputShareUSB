@@ -6,6 +6,19 @@ use std::env;
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown};
 
+enum PacketType {
+    Keyboard, Mouse
+}
+
+impl PacketType {
+    fn from_id(id: u8) -> Option<Self> {
+        match id {
+            0x1 => Some(PacketType::Keyboard),
+            0x2 => Some(PacketType::Mouse),
+            _   => None
+        }
+    }
+}
 
 fn main(){
 
@@ -47,16 +60,28 @@ fn main(){
                                     if size == 0 {
                                         break;
                                     }
-                                    let msg = &data[0..size];
-                                    // echo everything!
-                                    //stream.write(&data[0..size]).unwrap();
-                                    match file.as_mut() {
-                                        None => println!("Received {:?} from {:?}", &msg, &addr),
-                                        Some(device) => match device.write(&msg) {
-                                            Ok(_) => {},
-                                            Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
+                                    let msg = &data[1..size];
+
+                                    match PacketType::from_id(data[0]).expect("Unknown packet type") {
+                                        PacketType::Keyboard => match file.as_mut() {
+                                            None => println!("Received Keyboard:{:?} from {:?}", &msg, &addr),
+                                            Some(device) => match device.write(&msg) {
+                                                Ok(_) => {},
+                                                Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
+                                            }
+                                        }
+                                        PacketType::Mouse => match file.as_mut() {
+                                            None => println!("Received Mouse:{:?} from {:?}", &msg, &addr),
+                                            Some(device) => match device.write(&msg) {
+                                                Ok(_) => {},
+                                                Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
+                                            }
                                         }
                                     }
+
+                                    // echo everything!
+                                    //stream.write(&data[0..size]).unwrap();
+
                                 },
                                 Err(_) => {
                                     println!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
