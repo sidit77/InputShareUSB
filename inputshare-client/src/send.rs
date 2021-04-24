@@ -1,4 +1,4 @@
-use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE};
+use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP};
 use crate::keys::{VirtualKey, KeyState};
 use std::mem;
 
@@ -6,8 +6,9 @@ const IGNORE: usize = 0x1234567;
 
 #[allow(dead_code)]
 pub enum Input {
-    KeyboardInput(VirtualKey, KeyState),
-    StringInput(String)
+    KeyboardKeyInput(VirtualKey, KeyState),
+    StringInput(String),
+    MouseButtonInput(VirtualKey, KeyState)
 }
 
 trait AddInputs{
@@ -17,7 +18,7 @@ trait AddInputs{
 impl AddInputs for Vec<INPUT> {
     fn add(&mut self, input: &Input) {
         match input {
-            Input::KeyboardInput(key, state) =>  {
+            Input::KeyboardKeyInput(key, state) =>  {
                 self.push(create_keyboard_input(KEYBDINPUT{
                     wVk: key_to_u16(key),
                     wScan: 0,
@@ -47,7 +48,44 @@ impl AddInputs for Vec<INPUT> {
                     }));
                 }
             }
+            Input::MouseButtonInput(key, state) => {
+                self.push(create_mouse_input(MOUSEINPUT {
+                    dx: 0,
+                    dy: 0,
+                    mouseData: match key {
+                        VirtualKey::XButton1 => XBUTTON1 as u32,
+                        VirtualKey::XButton2 => XBUTTON2 as u32,
+                        _ => 0
+                    },
+                    dwFlags: match (key, state) {
+                        (VirtualKey::LButton , KeyState::Pressed ) => MOUSEEVENTF_LEFTDOWN,
+                        (VirtualKey::LButton , KeyState::Released) => MOUSEEVENTF_LEFTUP,
+                        (VirtualKey::RButton , KeyState::Pressed ) => MOUSEEVENTF_RIGHTDOWN,
+                        (VirtualKey::RButton , KeyState::Released) => MOUSEEVENTF_RIGHTUP,
+                        (VirtualKey::MButton , KeyState::Pressed ) => MOUSEEVENTF_MIDDLEDOWN,
+                        (VirtualKey::MButton , KeyState::Released) => MOUSEEVENTF_MIDDLEUP,
+                        (VirtualKey::XButton1, KeyState::Pressed ) => MOUSEEVENTF_XDOWN,
+                        (VirtualKey::XButton1, KeyState::Released) => MOUSEEVENTF_XUP,
+                        (VirtualKey::XButton2, KeyState::Pressed ) => MOUSEEVENTF_XDOWN,
+                        (VirtualKey::XButton2, KeyState::Released) => MOUSEEVENTF_XUP,
+                        _ => {println!("Unsupported key ({:?}): Skipping!", key); MOUSEEVENTF_WHEEL}
+                    },
+                    time: 0,
+                    dwExtraInfo: IGNORE
+                }))
+            }
         }
+    }
+}
+
+fn create_mouse_input(ms: MOUSEINPUT) -> INPUT {
+    unsafe {
+        let mut input = INPUT {
+            type_: INPUT_MOUSE,
+            u: std::mem::zeroed()
+        };
+        *input.u.mi_mut() = ms;
+        input
     }
 }
 

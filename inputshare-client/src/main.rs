@@ -139,6 +139,13 @@ fn run(stream: &mut TcpStream) {
                     }
                 };
 
+                if fresh && matches!(key, VirtualKey::LShift) && matches!(state, KeyState::Pressed) {
+                    send::send_keys([
+                        Input::MouseButtonInput(VirtualKey::LButton, KeyState::Pressed),
+                        Input::MouseButtonInput(VirtualKey::LButton, KeyState::Released)
+                    ].iter());
+                }
+
                 if fresh && matches!(key, VirtualKey::Apps) && matches!(state, KeyState::Pressed){
                     pressed_keys.retain(|(k, _)|!matches!(k, VirtualKey::Apps));
                     captured = !captured;
@@ -146,14 +153,14 @@ fn run(stream: &mut TcpStream) {
                     let mut k = modifiers.to_virtual_keys();
                     k.extend(pressed_keys.iter().map(|(x, _)|x));
                     if captured {
-                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Released)).collect();
+                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
                         send::send_keys(k.iter()).expect("could not send all keys");
                         stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                     } else {
                         stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
-                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Pressed)).collect();
+                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
                         send::send_keys(k.iter()).expect("could not send all keys");
                     }
                     return false;
