@@ -1,21 +1,13 @@
 use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::shared::windef::HHOOK;
-use crate::keys::{KeyState, VirtualKey, WindowsScanCode, ScrollDirection};
 use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT};
 use std::os::raw;
 use std::ptr::{null};
 use std::rc::{Rc, Weak};
 use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
-
-#[derive(Copy, Clone, Debug)]
-pub enum InputEvent {
-    KeyboardKeyEvent(VirtualKey, WindowsScanCode, KeyState),
-    MouseButtonEvent(VirtualKey, KeyState),
-    MouseWheelEvent(ScrollDirection),
-    MouseMoveEvent(i32, i32)
-}
+use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
 
 static mut NATIVE_HOOK: Option<NativeHook> = None;
 

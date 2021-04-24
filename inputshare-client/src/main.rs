@@ -2,21 +2,18 @@
 extern crate bitflags;
 extern crate native_windows_gui as nwg;
 
-use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey, HidMouseButtons, ScrollDirection};
+use crate::hid::{HidModifierKeys, convert_win2hid, HidScanCode, HidMouseButtons};
 use crate::gui::SystemTray;
 use nwg::NativeUi;
 use std::time::Duration;
 use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
 use std::io::{Write, Read};
-use crate::hook::InputEvent;
-use crate::send::Input;
 use std::convert::TryFrom;
+use yawi::{VirtualKey, InputEvent, KeyState, ScrollDirection, Input, InputHook};
 
 mod gui;
-mod keys;
+mod hid;
 mod config;
-mod hook;
-mod send;
 
 fn main(){
     println!("Hello client!");
@@ -100,7 +97,7 @@ fn run(stream: &mut TcpStream) {
     let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
     let mut captured = false;
     let mut pos: Option<(i32, i32)> = None;
-    let _hook = hook::InputHook::new(|event|{
+    let _hook = InputHook::new(|event|{
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
                 if BLACKLIST.contains(&key){
@@ -146,17 +143,17 @@ fn run(stream: &mut TcpStream) {
                     let mut k = modifiers.to_virtual_keys();
                     k.extend(pressed_keys.iter().map(|(x, _)|x));
                     if captured {
-                        let mut k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
+                        let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
                         k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
-                        send::send_keys(k.iter()).expect("could not send all keys");
+                        yawi::send_keys(k.iter()).expect("could not send all keys");
                         stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                     } else {
                         stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
-                        let mut k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
+                        let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
                         k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
-                        send::send_keys(k.iter()).expect("could not send all keys");
+                        yawi::send_keys(k.iter()).expect("could not send all keys");
                     }
                     return false;
                 }

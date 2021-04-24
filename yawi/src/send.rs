@@ -1,19 +1,10 @@
 use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, GetSystemMetrics};
-use crate::keys::{VirtualKey, KeyState, ScrollDirection};
 use std::mem;
+use crate::{KeyState, Input, VirtualKey, ScrollDirection};
 
 const IGNORE: usize = 0x1234567;
 
-#[derive(Copy, Clone, Debug)]
-#[allow(dead_code)]
-pub enum Input<'a> {
-    KeyboardKeyInput(VirtualKey, KeyState),
-    StringInput(&'a str),
-    MouseButtonInput(VirtualKey, KeyState),
-    MouseScrollInput(ScrollDirection),
-    RelativeMouseMoveInput(i32, i32),
-    AbsoluteMouseMoveInput(i32, i32)
-}
+
 
 trait AddInputs{
     fn add(&mut self, input: &Input);
