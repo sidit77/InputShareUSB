@@ -135,6 +135,8 @@ fn run(stream: &mut TcpStream) {
                     if captured {
                         let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardInput(key, KeyState::Released)).collect();
                         send::send_keys(k.iter()).expect("could not send all keys");
+                        stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
+                        stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                     } else {
                         stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
@@ -177,17 +179,23 @@ fn run(stream: &mut TcpStream) {
                 !captured
             },
             InputEvent::MouseMoveEvent(px, py) => {
+                if pos.is_none() {
+                    pos = Some((px, py));
+                    return true;
+                }
                 if captured {
+                    //println!("{} - {}", px, py);
                     let (dx, dy) = match pos {
                         None => (0, 0),
                         Some((ox, oy)) => (px - ox, py - oy)
                     };
-                    pos = Some((px, py));
                     let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
                     if dx != 0 || dy != 0 {
-                        println!("{} - {}", dx, dy);
+                        //println!("{} - {}", dx, dy);
                         stream.write_all(&make_ms_packet(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
                     }
+                } else {
+                    pos = Some((px, py));
                 }
                 !captured
             }

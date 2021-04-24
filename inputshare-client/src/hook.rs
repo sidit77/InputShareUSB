@@ -121,7 +121,7 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
                 winapi::um::winuser::WM_XBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
                 winapi::um::winuser::WM_NCXBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
                 winapi::um::winuser::WM_NCXBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
-                winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.x)),
+                winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
                 winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(parse_wheel_delta(&key_struct),0.0)),
                 winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(0.0, parse_wheel_delta(&key_struct))),
                 _ => {println!("Unknown: {}", wparam); None}
