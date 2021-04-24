@@ -91,6 +91,12 @@ impl HidMouseButtons {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ScrollDirection {
+    Horizontal(f32), Vertical(f32)
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub enum KeyState {
     Pressed, Released

@@ -1,7 +1,7 @@
 use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::shared::windef::HHOOK;
-use crate::keys::{KeyState, VirtualKey, WindowsScanCode};
+use crate::keys::{KeyState, VirtualKey, WindowsScanCode, ScrollDirection};
 use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT};
 use std::os::raw;
 use std::ptr::{null};
@@ -13,7 +13,7 @@ use std::cell::RefCell;
 pub enum InputEvent {
     KeyboardKeyEvent(VirtualKey, WindowsScanCode, KeyState),
     MouseButtonEvent(VirtualKey, KeyState),
-    MouseWheelEvent(f32, f32),
+    MouseWheelEvent(ScrollDirection),
     MouseMoveEvent(i32, i32)
 }
 
@@ -122,8 +122,8 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
                 winapi::um::winuser::WM_NCXBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
                 winapi::um::winuser::WM_NCXBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
                 winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
-                winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(parse_wheel_delta(&key_struct),0.0)),
-                winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(0.0, parse_wheel_delta(&key_struct))),
+                winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
+                winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
                 _ => {println!("Unknown: {}", wparam); None}
             };
 

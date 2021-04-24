@@ -1,14 +1,16 @@
-use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP};
-use crate::keys::{VirtualKey, KeyState};
+use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA};
+use crate::keys::{VirtualKey, KeyState, ScrollDirection};
 use std::mem;
 
 const IGNORE: usize = 0x1234567;
 
+#[derive(Copy, Clone, Debug)]
 #[allow(dead_code)]
-pub enum Input {
+pub enum Input<'a> {
     KeyboardKeyInput(VirtualKey, KeyState),
-    StringInput(String),
-    MouseButtonInput(VirtualKey, KeyState)
+    StringInput(&'a str),
+    MouseButtonInput(VirtualKey, KeyState),
+    MouseScrollInput(ScrollDirection)
 }
 
 trait AddInputs{
@@ -74,6 +76,22 @@ impl AddInputs for Vec<INPUT> {
                     dwExtraInfo: IGNORE
                 }))
             }
+            Input::MouseScrollInput(dir) => {
+                self.push(create_mouse_input(MOUSEINPUT{
+                    dx: 0,
+                    dy: 0,
+                    mouseData: (WHEEL_DELTA as f32 * match dir {
+                        ScrollDirection::Horizontal(x) => x,
+                        ScrollDirection::Vertical(x) => x
+                    }) as i32 as u32,
+                    dwFlags: match dir {
+                        ScrollDirection::Horizontal(_) => MOUSEEVENTF_HWHEEL,
+                        ScrollDirection::Vertical(_) => MOUSEEVENTF_WHEEL
+                    },
+                    time: 0,
+                    dwExtraInfo: IGNORE
+                }));
+            }
         }
     }
 }
@@ -100,7 +118,7 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
     }
 }
 
-pub fn send_keys<'a>(inputs: impl Iterator<Item=&'a Input>) -> anyhow::Result<()>{
+pub fn send_keys<'a>(inputs: impl Iterator<Item=&'a Input<'a>>) -> anyhow::Result<()>{
     let mut ia: Vec<INPUT> = inputs.fold(Vec::new(), |mut v, i|{v.add(i); v});
     let c = unsafe {winapi::um::winuser::SendInput(ia.len() as u32, ia.as_mut_ptr(), mem::size_of::<INPUT>() as i32)};
     match ia.len() == c as usize {

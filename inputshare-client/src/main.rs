@@ -2,7 +2,7 @@
 extern crate bitflags;
 extern crate native_windows_gui as nwg;
 
-use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey, HidMouseButtons};
+use crate::keys::{HidModifierKeys, KeyState, convert_win2hid, HidScanCode, VirtualKey, HidMouseButtons, ScrollDirection};
 use crate::gui::SystemTray;
 use nwg::NativeUi;
 use std::time::Duration;
@@ -141,9 +141,8 @@ fn run(stream: &mut TcpStream) {
 
                 if fresh && matches!(key, VirtualKey::LShift) && matches!(state, KeyState::Pressed) {
                     send::send_keys([
-                        Input::MouseButtonInput(VirtualKey::LButton, KeyState::Pressed),
-                        Input::MouseButtonInput(VirtualKey::LButton, KeyState::Released)
-                    ].iter());
+                        Input::MouseScrollInput(ScrollDirection::Vertical(-2.0))
+                    ].iter()).expect("send");
                 }
 
                 if fresh && matches!(key, VirtualKey::Apps) && matches!(state, KeyState::Pressed){
@@ -192,9 +191,12 @@ fn run(stream: &mut TcpStream) {
                 }
                 !captured
             },
-            InputEvent::MouseWheelEvent(dv, dh) => {
+            InputEvent::MouseWheelEvent(dir) => {
                 if captured {
-                    stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, dv as i8, dh as i8)).expect("Error sending packet");
+                    match dir {
+                        ScrollDirection::Horizontal(am) => stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, 0, am as i8)).expect("Error sending packet"),
+                        ScrollDirection::Vertical(am) => stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, am as i8, 0)).expect("Error sending packet")
+                    }
                 }
                 !captured
             },
