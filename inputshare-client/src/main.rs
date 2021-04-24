@@ -1,17 +1,13 @@
 #[macro_use]
 extern crate bitflags;
-extern crate native_windows_gui as nwg;
 
 use crate::hid::{HidModifierKeys, convert_win2hid, HidScanCode, HidMouseButtons};
-use crate::gui::SystemTray;
-use nwg::NativeUi;
 use std::time::Duration;
 use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
-use std::io::{Write, Read};
+use std::io::{Write, Read, stdin};
 use std::convert::TryFrom;
 use yawi::{VirtualKey, InputEvent, KeyState, ScrollDirection, Input, InputHook};
 
-mod gui;
 mod hid;
 mod config;
 
@@ -19,9 +15,6 @@ fn main(){
     println!("Hello client!");
 
     let cfg = config::Config::load();
-
-    nwg::init().expect("Failed to init Native Windows GUI");
-    let _ui = SystemTray::build_ui(Default::default()).expect("Failed to build UI");
 
     let server = match std::env::var("REMOTE_OVERRIDE") {
         Ok(s) => s.parse().expect("Can not parse address given with REMOTE_OVERRIDE"),
@@ -215,12 +208,26 @@ fn run(stream: &mut TcpStream) {
         }
     });
 
-    nwg::dispatch_thread_events();
+    let quitter = yawi::Quitter::from_current_thread();
+    ctrlc::set_handler(move ||{
+        quitter.quit();
+        println!("Stopping!");
+    }).expect("Cant set ctrl c handler!");
 
-    //nwg::dispatch_thread_events_with_callback(move ||{
-    //    //socket.manual_poll(Instant::now());
-    //    //receiver.try_recv();
-    //});
+    let quitter = yawi::Quitter::from_current_thread();
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        loop {
+            stdin().read_line(&mut s).expect("Cant read stdin!");
+            if s.trim().eq("stop") {
+                break;
+            }
+        }
+        quitter.quit();
+    });
+
+    yawi::run();
+
 }
 
 fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanCode)>>) -> [u8; 9] {
