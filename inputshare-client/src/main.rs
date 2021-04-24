@@ -146,14 +146,16 @@ fn run(stream: &mut TcpStream) {
                     let mut k = modifiers.to_virtual_keys();
                     k.extend(pressed_keys.iter().map(|(x, _)|x));
                     if captured {
-                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
+                        let mut k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
+                        k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
                         send::send_keys(k.iter()).expect("could not send all keys");
                         stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                     } else {
                         stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
-                        let k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
+                        let mut k: Vec<send::Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
+                        k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
                         send::send_keys(k.iter()).expect("could not send all keys");
                     }
                     return false;
