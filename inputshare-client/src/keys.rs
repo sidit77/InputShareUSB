@@ -91,13 +91,13 @@ impl HidMouseButtons {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub enum KeyState {
     Pressed, Released
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash)]
 #[repr(u32)]
 pub enum VirtualKey {
     LButton                      = 0x01,
