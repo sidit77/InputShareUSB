@@ -10,6 +10,7 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
 use std::io::{Write, Read};
 use crate::hook::InputEvent;
 use crate::send::Input;
+use std::convert::TryFrom;
 
 mod gui;
 mod keys;
@@ -88,6 +89,7 @@ fn run(stream: &mut TcpStream) {
     let mut pressed_buttons = HidMouseButtons::None;
     let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
     let mut captured = false;
+    let mut pos: Option<(i32, i32)> = None;
     let _hook = hook::InputHook::new(|event|{
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
@@ -166,11 +168,29 @@ fn run(stream: &mut TcpStream) {
                 if captured {
                     stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, 0, 0)).expect("Error sending packet");
                 }
-
                 !captured
             },
-            InputEvent::MouseWheelEvent(_, _) => !captured,
-            InputEvent::MouseMoveEvent(_, _) => !captured
+            InputEvent::MouseWheelEvent(dv, dh) => {
+                if captured {
+                    stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, dv as i8, dh as i8)).expect("Error sending packet");
+                }
+                !captured
+            },
+            InputEvent::MouseMoveEvent(px, py) => {
+                if captured {
+                    let (dx, dy) = match pos {
+                        None => (0, 0),
+                        Some((ox, oy)) => (px - ox, py - oy)
+                    };
+                    pos = Some((px, py));
+                    let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
+                    if dx != 0 || dy != 0 {
+                        println!("{} - {}", dx, dy);
+                        stream.write_all(&make_ms_packet(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
+                    }
+                }
+                !captured
+            }
         }
     });
 
@@ -194,10 +214,18 @@ fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanC
     packet
 }
 
-fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 8] {
-    let mut packet = [0x0 as u8; 8];
+fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 9] {
+    let mut packet = [0x0 as u8; 9];
     packet[0] = 0x2;
     packet[1] = buttons.to_byte();
+    let dx = dx.to_le_bytes();
+    let dy = dy.to_le_bytes();
+    packet[2] = dx[0];
+    packet[3] = dx[1];
+    packet[4] = dy[0];
+    packet[5] = dy[1];
+    packet[6] = dv as u8;
+    packet[7] = dh as u8;
     packet
 }
 

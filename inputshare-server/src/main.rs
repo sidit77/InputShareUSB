@@ -5,15 +5,15 @@ use std::io::{Write, Read};
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown};
 
-enum PacketType {
-    Keyboard, Mouse
+enum PacketType<'a> {
+    Keyboard(&'a[u8]), Mouse(&'a[u8])
 }
 
-impl PacketType {
-    fn from_id(id: u8) -> Option<Self> {
-        match id {
-            0x1 => Some(PacketType::Keyboard),
-            0x2 => Some(PacketType::Mouse),
+impl<'a> PacketType<'a> {
+    fn from_packet(packet: &'a[u8]) -> Option<Self> {
+        match packet[0] {
+            0x1 => Some(PacketType::Keyboard(&packet[1..9])),
+            0x2 => Some(PacketType::Mouse(&packet[1..8])),
             _   => None
         }
     }
@@ -58,24 +58,23 @@ fn main(){
                 match do_handshake(&mut stream) {
                     Ok(_) => {
                         stream.set_read_timeout(None).unwrap();
-                        let mut data = [0 as u8; 50];
+                        let mut data = [0 as u8; 9];
                         loop {
                             match stream.read(&mut data) {
                                 Ok(size) => {
                                     if size == 0 {
                                         break;
                                     }
-                                    let msg = &data[1..size];
 
-                                    match PacketType::from_id(data[0]).expect("Unknown packet type") {
-                                        PacketType::Keyboard => match kbfile.as_mut() {
+                                    match PacketType::from_packet(&data).expect("Unknown packet type") {
+                                        PacketType::Keyboard(msg) => match kbfile.as_mut() {
                                             None => println!("Received Keyboard:{:?} from {:?}", &msg, &addr),
                                             Some(device) => match device.write(&msg) {
                                                 Ok(_) => {},
                                                 Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
                                             }
                                         }
-                                        PacketType::Mouse => match msfile.as_mut() {
+                                        PacketType::Mouse(msg) => match msfile.as_mut() {
                                             None => println!("Received Mouse:{:?} from {:?}", &msg, &addr),
                                             Some(device) => match device.write(&msg) {
                                                 Ok(_) => {},
