@@ -84,6 +84,16 @@ fn read_string(stream: &mut TcpStream, data: &mut [u8]) -> anyhow::Result<String
     Ok(String::from_utf8_lossy(&data[0..read]).to_string())
 }
 
+const BLACKLIST: [VirtualKey; 7] = [
+    VirtualKey::VolumeDown,
+    VirtualKey::VolumeUp,
+    VirtualKey::VolumeMute,
+    VirtualKey::MediaStop,
+    VirtualKey::MediaPrevTrack,
+    VirtualKey::MediaPlayPause,
+    VirtualKey::MediaNextTrack
+];
+
 fn run(stream: &mut TcpStream) {
     let mut modifiers = HidModifierKeys::None;
     let mut pressed_buttons = HidMouseButtons::None;
@@ -93,6 +103,9 @@ fn run(stream: &mut TcpStream) {
     let _hook = hook::InputHook::new(|event|{
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
+                if BLACKLIST.contains(&key){
+                    return true;
+                }
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
                     Some(m) => {
                         let old = modifiers;
@@ -184,14 +197,12 @@ fn run(stream: &mut TcpStream) {
                     return true;
                 }
                 if captured {
-                    //println!("{} - {}", px, py);
                     let (dx, dy) = match pos {
                         None => (0, 0),
                         Some((ox, oy)) => (px - ox, py - oy)
                     };
                     let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
                     if dx != 0 || dy != 0 {
-                        //println!("{} - {}", dx, dy);
                         stream.write_all(&make_ms_packet(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
                     }
                 } else {
