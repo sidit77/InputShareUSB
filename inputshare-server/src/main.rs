@@ -1,6 +1,6 @@
 mod config;
 
-use std::fs::{OpenOptions};
+use std::fs::{OpenOptions, File};
 use std::io::{Write, Read};
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown};
@@ -55,48 +55,10 @@ fn main(){
             Ok((mut stream, addr)) => {
                 println!("Got connection from {}", addr);
 
-                match do_handshake(&mut stream) {
-                    Ok(_) => {
-                        stream.set_read_timeout(None).unwrap();
-                        let mut data = [0 as u8; 9];
-                        loop {
-                            match stream.read(&mut data) {
-                                Ok(size) => {
-                                    if size == 0 {
-                                        break;
-                                    }
-
-                                    match PacketType::from_packet(&data).expect("Unknown packet type") {
-                                        PacketType::Keyboard(msg) => match kbfile.as_mut() {
-                                            None => println!("Received Keyboard:{:?} from {:?}", &msg, &addr),
-                                            Some(device) => match device.write(&msg) {
-                                                Ok(_) => {},
-                                                Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
-                                            }
-                                        }
-                                        PacketType::Mouse(msg) => match msfile.as_mut() {
-                                            None => println!("Received Mouse:{:?} from {:?}", &msg, &addr),
-                                            Some(device) => match device.write(&msg) {
-                                                Ok(_) => {},
-                                                Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
-                                            }
-                                        }
-                                    }
-
-                                    // echo everything!
-                                    //stream.write(&data[0..size]).unwrap();
-
-                                },
-                                Err(_) => {
-                                    println!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
-                                    stream.shutdown(Shutdown::Both).unwrap();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        println!("An handshake error occurred, terminating connection with {}", stream.peer_addr().unwrap());
+                match handle_client(&mut stream, &mut kbfile, &mut msfile) {
+                    Ok(_) => println!("Disconnected!"),
+                    Err(e) => {
+                        println!("An error occurred, terminating connection with {}: {}", stream.peer_addr().unwrap(), e);
                         stream.shutdown(Shutdown::Both).unwrap();
                     }
                 }
@@ -106,6 +68,37 @@ fn main(){
         }
     }
 
+}
+
+fn handle_client(stream: &mut TcpStream, kbfile: &mut Option<File>, msfile: &mut Option<File>) -> anyhow::Result<()> {
+
+    do_handshake(stream)?;
+    stream.set_read_timeout(None)?;
+
+    let mut data = [0 as u8; 9];
+    loop {
+        let size = stream.read(&mut data)?;
+        if size == 0 {
+            break;
+        }
+        match PacketType::from_packet(&data).expect("Unknown packet type") {
+            PacketType::Keyboard(msg) => match kbfile.as_mut() {
+                None => println!("Received Keyboard:{:?}", &msg),
+                Some(device) => match device.write(&msg) {
+                    Ok(_) => {},
+                    Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
+                }
+            }
+            PacketType::Mouse(msg) => match msfile.as_mut() {
+                None => println!("Received Mouse:{:?}", &msg),
+                Some(device) => match device.write(&msg) {
+                    Ok(_) => {},
+                    Err(e) => println!("Encountered error while write packet {:?} into file {:?}:\n{}", &msg, &device, e)
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn do_handshake(stream: &mut TcpStream) -> anyhow::Result<()> {
