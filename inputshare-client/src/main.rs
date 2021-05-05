@@ -138,7 +138,7 @@ fn run(stream: &mut TcpStream) {
                     if captured {
                         let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
                         k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
-                        yawi::send_keys(k.iter()).expect("could not send all keys");
+                        yawi::send_inputs(k.as_slice()).expect("could not send all keys");
                         stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
                         stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                     } else {
@@ -146,7 +146,7 @@ fn run(stream: &mut TcpStream) {
                         stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
                         let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
                         k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
-                        yawi::send_keys(k.iter()).expect("could not send all keys");
+                        yawi::send_inputs(k.as_slice()).expect("could not send all keys");
                     }
                     return false;
                 }
