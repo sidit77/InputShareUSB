@@ -1,6 +1,6 @@
 pub use enums::{KeyState, VirtualKey, ScrollDirection, WindowsScanCode, InputEvent, Input};
 pub use hook::InputHook;
-pub use send::{send_keys, send_key};
+pub use send::{send_inputs, send_input};
 pub use message::{run, quit, Quitter};
 
 mod enums;
