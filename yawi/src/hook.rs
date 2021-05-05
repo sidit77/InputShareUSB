@@ -1,13 +1,14 @@
 use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::shared::windef::HHOOK;
-use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT};
+use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT, UINT};
 use std::os::raw;
 use std::ptr::{null};
 use std::rc::{Rc, Weak};
 use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
+use std::convert::TryInto;
 
 static mut NATIVE_HOOK: Option<NativeHook> = None;
 
@@ -84,11 +85,21 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
 
         if key_struct.dwExtraInfo != IGNORE {
-            let event = InputEvent::KeyboardKeyEvent(parse_virtual_key(&key_struct), parse_scancode(&key_struct), parse_key_state(wparam as u32));
 
-            if !for_all(event) {
-                return 1;
+            let event = match parse_virtual_key(&key_struct) {
+                Some(key) => match parse_key_state(wparam) {
+                    Some(state) => Some(InputEvent::KeyboardKeyEvent(key, parse_scancode(&key_struct), state)),
+                    None => {println!("Unknown event: {}", wparam); None}
+                }
+                None => {println!("Unknown key: {}", key_struct.vkCode); None}
+            };
+
+            if let Some(event) = event {
+                if !for_all(event) {
+                    return 1;
+                }
             }
+
         }
 
     }
@@ -167,18 +178,16 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
     scancode
 }
 
-fn parse_virtual_key(key_struct: &KBDLLHOOKSTRUCT) -> VirtualKey {
-    unsafe {
-        ((&(key_struct.vkCode) as *const u32) as *const VirtualKey).read()
-    }
+fn parse_virtual_key(key_struct: &KBDLLHOOKSTRUCT) -> Option<VirtualKey> {
+    key_struct.vkCode.try_into().ok()
 }
 
-fn parse_key_state(wparam: u32) -> KeyState {
-    match wparam {
-        WM_KEYDOWN=> KeyState::Pressed,
-        WM_SYSKEYDOWN=> KeyState::Pressed,
-        WM_KEYUP=> KeyState::Released,
-        WM_SYSKEYUP=> KeyState::Released,
-        _ => KeyState::Released
+fn parse_key_state(wparam: WPARAM) -> Option<KeyState> {
+    match wparam as UINT {
+        WM_KEYDOWN    => Some(KeyState::Pressed),
+        WM_SYSKEYDOWN => Some(KeyState::Pressed),
+        WM_KEYUP      => Some(KeyState::Released),
+        WM_SYSKEYUP   => Some(KeyState::Released),
+        _ => None
     }
 }

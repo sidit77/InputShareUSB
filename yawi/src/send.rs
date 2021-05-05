@@ -15,7 +15,7 @@ impl AddInputs for Vec<INPUT> {
         match input {
             Input::KeyboardKeyInput(key, state) =>  {
                 self.push(create_keyboard_input(KEYBDINPUT{
-                    wVk: key_to_u16(key),
+                    wVk: key.clone().into(),
                     wScan: 0,
                     dwFlags: match state {
                         KeyState::Pressed => 0,
@@ -146,12 +146,6 @@ pub fn send_keys<'a>(inputs: impl Iterator<Item=&'a Input<'a>>) -> anyhow::Resul
     }
 }
 
-#[allow(dead_code)]
 pub fn send_key(input: &Input) -> anyhow::Result<()> {
     send_keys(std::iter::once(input))
-}
-
-
-fn key_to_u16(key: &VirtualKey) -> u16 {
-    (unsafe { ((key as *const VirtualKey) as *const u32).read() }) as u16
 }

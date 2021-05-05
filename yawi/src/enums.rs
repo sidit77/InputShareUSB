@@ -1,35 +1,77 @@
+use num::traits::AsPrimitive;
+use std::convert::{TryFrom, TryInto};
+use num::ToPrimitive;
+
 pub type WindowsScanCode = u16;
 
+/// Possible input events
 #[derive(Copy, Clone, Debug)]
 pub enum InputEvent {
+    /// A key got pressed, released or repeated
     KeyboardKeyEvent(VirtualKey, WindowsScanCode, KeyState),
+    /// A mouse button got pressed
     MouseButtonEvent(VirtualKey, KeyState),
+    /// The mouse wheel moved
+    ///
+    /// See `ScrollDirection` for more info
     MouseWheelEvent(ScrollDirection),
+    /// The mouse moved
+    ///
+    /// x,y - the new coordinates in pixels
     MouseMoveEvent(i32, i32)
 }
 
+/// This enum describes the kind of input event that should be simulated
+///
+/// Each Input enum gets translated to one (or in the case of `StringInput` many)
+/// [INPUT](https://docs.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-input) structs
 #[derive(Copy, Clone, Debug)]
 pub enum Input<'a> {
+    /// Simulates the press or release of a single key
     KeyboardKeyInput(VirtualKey, KeyState),
+    /// Send the characters of the given string to the currently active window
     StringInput(&'a str),
+    /// Simulates the press or release of a mouse button
     MouseButtonInput(VirtualKey, KeyState),
+    /// Simulates the movement of the scroll wheel
     MouseScrollInput(ScrollDirection),
+    /// Moves the mouse relative to its current position
+    ///
+    /// # Arguments
+    /// * x, y - The offset in pixels
     RelativeMouseMoveInput(i32, i32),
+    /// Moves to mouse to an absolute position
+    ///
+    /// # Arguments
+    /// * x, y - The new mouse coordinates in pixels.
+    /// (0,0) is the top-left corner of the primary monitor
     AbsoluteMouseMoveInput(i32, i32)
 }
 
+/// The mouse wheel scroll value
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ScrollDirection {
-    Horizontal(f32), Vertical(f32)
+    /// A horizontal scroll value
+    ///
+    /// -1.0 means one click to the left, 1.0 one click to the right
+    Horizontal(f32),
+    /// A vertical scroll value
+    ///
+    /// -1.0 means one click towards the user, 1.0 one click award from the user
+    Vertical(f32)
 }
 
+/// The state of a key or mouse button
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub enum KeyState {
     Pressed, Released
 }
 
+/// Windows virtual key code.
+///
+/// See [Virtual-Key Codes](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx) for more information.
 #[derive(Debug, Copy, Clone, PartialEq, Hash)]
-#[repr(u32)]
+#[repr(u8)]
 pub enum VirtualKey {
     LButton                      = 0x01,
     RButton                      = 0x02,
@@ -257,4 +299,64 @@ pub enum VirtualKey {
     Noname                       = 0xFC,
     Pa1                          = 0xFD,
     OemClear                     = 0xFE
+}
+
+const INVALID_KEYS: [u8; 60] = [
+    0x07, 0x0A, 0x0B, 0x0E, 0x0F, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x5E, 0x88, 0x89,
+    0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0x9D, 0x9E, 0x9F,
+    0xB8, 0xB9, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD,
+    0xCE, 0xCF, 0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE0, 0xE8
+];
+
+impl TryFrom<u8> for VirtualKey {
+    type Error = &'static str;
+    fn try_from(id: u8) -> Result<Self, Self::Error> {
+        if INVALID_KEYS.contains(&id) {
+            Err("Invalid key code!")
+        } else {
+            unsafe {
+                Ok(*(&id as *const u8 as *const VirtualKey))
+            }
+        }
+    }
+}
+
+impl TryFrom<u16> for VirtualKey {
+    type Error = &'static str;
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value.to_u8() {
+            None => Err("Invalid key code!"),
+            Some(i) => TryInto::<VirtualKey>::try_into(i)
+        }
+    }
+}
+
+impl TryFrom<u32> for VirtualKey {
+    type Error = &'static str;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value.to_u8() {
+            None => Err("Invalid key code!"),
+            Some(i) => TryInto::<VirtualKey>::try_into(i)
+        }
+    }
+}
+
+impl From<VirtualKey> for u8 {
+    fn from(key: VirtualKey) -> Self {
+        unsafe {
+            *(&key as *const VirtualKey as *const u8)
+        }
+    }
+}
+
+impl From<VirtualKey> for u16 {
+    fn from(key: VirtualKey) -> Self {
+        Into::<u8>::into(key).as_()
+    }
+}
+
+impl From<VirtualKey> for u32 {
+    fn from(key: VirtualKey) -> Self {
+        Into::<u8>::into(key).as_()
+    }
 }
