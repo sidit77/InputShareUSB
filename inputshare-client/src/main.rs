@@ -84,17 +84,46 @@ const BLACKLIST: [VirtualKey; 7] = [
     VirtualKey::MediaNextTrack
 ];
 
+const HOTKEY: VirtualKey = VirtualKey::Apps;
+
 fn run(stream: &mut TcpStream) {
     let mut modifiers = HidModifierKeys::None;
     let mut pressed_buttons = HidMouseButtons::None;
     let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
     let mut captured = false;
+    let mut hk_available = true;
     let mut pos: Option<(i32, i32)> = None;
     let _hook = InputHook::new(|event|{
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
                 if BLACKLIST.contains(&key){
                     return true;
+                }
+                if matches!(key, HOTKEY){
+                    match state {
+                        KeyState::Pressed => if hk_available {
+                            hk_available = false;
+                            captured = !captured;
+                            println!("Captured: {}", captured);
+                            let mut k = modifiers.to_virtual_keys();
+                            k.extend(pressed_keys.iter().map(|(x, _)|x));
+                            if captured {
+                                let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
+                                k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
+                                yawi::send_inputs(k.as_slice()).expect("could not send all keys");
+                                stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
+                                stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
+                            } else {
+                                stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
+                                stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
+                                let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
+                                k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
+                                yawi::send_inputs(k.as_slice()).expect("could not send all keys");
+                            }
+                        }
+                        KeyState::Released => hk_available = true
+                    }
+                    return false;
                 }
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
                     Some(m) => {
@@ -128,28 +157,6 @@ fn run(stream: &mut TcpStream) {
                         }
                     }
                 };
-
-                if fresh && matches!(key, VirtualKey::Apps) && matches!(state, KeyState::Pressed){
-                    pressed_keys.retain(|(k, _)|!matches!(k, VirtualKey::Apps));
-                    captured = !captured;
-                    println!("Captured: {}", captured);
-                    let mut k = modifiers.to_virtual_keys();
-                    k.extend(pressed_keys.iter().map(|(x, _)|x));
-                    if captured {
-                        let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
-                        k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
-                        yawi::send_inputs(k.as_slice()).expect("could not send all keys");
-                        stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
-                        stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
-                    } else {
-                        stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
-                        stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
-                        let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
-                        k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
-                        yawi::send_inputs(k.as_slice()).expect("could not send all keys");
-                    }
-                    return false;
-                }
 
                 if captured {
                     if fresh {
