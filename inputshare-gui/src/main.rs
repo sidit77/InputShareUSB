@@ -1,12 +1,14 @@
-use iced::{button, Align, Button, Column, Element, Sandbox, Settings, Text, Row, Length, VerticalAlignment, Color, Background, Container, Space, HorizontalAlignment, Scrollable};
+use iced::{button, Align, Button, Column, Element, Sandbox, Settings, Text, Row, Length, VerticalAlignment, Color, Background, Container, Space, HorizontalAlignment, Scrollable, scrollable};
 use iced::container::Style;
+use iced::scrollable::Scrollbar;
 
 pub fn main() -> iced::Result {
     Counter::run(Settings::default())
 }
 
 enum ContainerStyle {
-    Colored(Color)
+    Colored(Color),
+    Border
 }
 
 impl iced::container::StyleSheet for ContainerStyle {
@@ -14,6 +16,12 @@ impl iced::container::StyleSheet for ContainerStyle {
         match self {
             ContainerStyle::Colored(color) => Style {
                 background: Some(Background::from(*color)),
+                ..Default::default()
+            },
+            ContainerStyle::Border => Style{
+                border_width: 2.0,
+                border_radius: 4.0,
+                border_color: Color::from_rgb8(230,230,230),
                 ..Default::default()
             }
         }
@@ -23,11 +31,13 @@ impl iced::container::StyleSheet for ContainerStyle {
 #[derive(Default)]
 struct Counter {
     value: i32,
+    lines: Vec<String>,
     refresh_button: button::State,
     shutdown_button: button::State,
     settings_button: button::State,
     start_client_button: button::State,
     start_server_button: button::State,
+    server_output: scrollable::State
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,7 +50,14 @@ impl Sandbox for Counter {
     type Message = Message;
 
     fn new() -> Self {
-        Self::default()
+        Self{
+            lines: std::fs::read_to_string("inputshare-server/src/main.rs")
+                .expect("file not found!")
+                .lines()
+                .map(|s|String::from(s))
+                .collect(),
+            ..Default::default()
+        }
     }
 
     fn title(&self) -> String {
@@ -101,9 +118,7 @@ impl Sandbox for Counter {
                                     .height(Length::Fill)
                                     .style(ContainerStyle::Colored(Color::from_rgb8(0, 230, 0)))
                             )
-                            //.push(
-                            //    Scrollable::new()
-                            //)
+
                     )
                     .push(
                         Column::new()
@@ -116,12 +131,20 @@ impl Sandbox for Counter {
                                 .width(Length::Fill)
                                 .on_press(Message::DecrementPressed)
                             )
-                            .push(
-                                Container::new(Space::new(Length::Fill, Length::Fill))
-                                    .width(Length::Fill)
-                                    .height(Length::Fill)
-                                    .style(ContainerStyle::Colored(Color::from_rgb8(230, 0, 0)))
-                            )
+                            .push(Container::new(
+                               // Scrollable::new(&mut self.server_output)
+                               //     .push(Text::new("Test").size(50))
+                               //     .push(Text::new("Iced supports scrollable content. Try it out! Find the button further below."))
+                               //     .push(Text::new("Tip: You can use the scrollbar to scroll down faster!").size(16))
+                               //     .push(Column::new().height(Length::Units(4096)))
+                               //     .push(Text::new("You are halfway there!").width(Length::Fill).size(30).horizontal_alignment(HorizontalAlignment::Center))
+                               //     .push(Column::new().height(Length::Units(4096)))
+                               //     .push(Text::new("You made it!").width(Length::Fill).size(50).horizontal_alignment(HorizontalAlignment::Center))
+                               self.lines
+                                   .iter()
+                                   .map(|l|Text::new(l))
+                                   .fold(Scrollable::new(&mut self.server_output), |a, t|a.push(t))
+                            ).style(ContainerStyle::Border).padding(8))
                     )
             )
             .into()
