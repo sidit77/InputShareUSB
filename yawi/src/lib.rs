@@ -7,3 +7,4 @@ mod enums;
 mod send;
 mod hook;
 mod message;
+mod error;
