@@ -1,6 +1,4 @@
-use num::traits::AsPrimitive;
 use std::convert::{TryFrom, TryInto};
-use num::ToPrimitive;
 
 pub type WindowsScanCode = u16;
 
@@ -70,7 +68,7 @@ pub enum KeyState {
 /// Windows virtual key code.
 ///
 /// See [Virtual-Key Codes](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx) for more information.
-#[derive(Debug, Copy, Clone, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum VirtualKey {
     LButton                      = 0x01,
@@ -324,7 +322,7 @@ impl TryFrom<u8> for VirtualKey {
 impl TryFrom<u16> for VirtualKey {
     type Error = &'static str;
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        match value.to_u8() {
+        match TryInto::<u8>::try_into(value).ok() {
             None => Err("Invalid key code!"),
             Some(i) => TryInto::<VirtualKey>::try_into(i)
         }
@@ -334,7 +332,7 @@ impl TryFrom<u16> for VirtualKey {
 impl TryFrom<u32> for VirtualKey {
     type Error = &'static str;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match value.to_u8() {
+        match TryInto::<u8>::try_into(value).ok() {
             None => Err("Invalid key code!"),
             Some(i) => TryInto::<VirtualKey>::try_into(i)
         }
@@ -351,12 +349,12 @@ impl From<VirtualKey> for u8 {
 
 impl From<VirtualKey> for u16 {
     fn from(key: VirtualKey) -> Self {
-        Into::<u8>::into(key).as_()
+        Into::<u8>::into(key).into()
     }
 }
 
 impl From<VirtualKey> for u32 {
     fn from(key: VirtualKey) -> Self {
-        Into::<u8>::into(key).as_()
+        Into::<u8>::into(key).into()
     }
 }
