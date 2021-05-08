@@ -18,4 +18,3 @@ chmod +x /usr/bin/enable_hid.sh
 
 # Enable service
 systemctl enable enable_hid.service
-© 2021 GitHub, Inc.
