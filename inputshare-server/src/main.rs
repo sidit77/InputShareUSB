@@ -7,6 +7,8 @@ use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
 use std::borrow::Cow;
 
+//TODO write zero into devices on error
+
 #[derive(Debug, Copy, Clone)]
 enum MousePacketType {
     Movement, Default
@@ -182,10 +184,12 @@ fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow
             stream.set_read_timeout(None)?;
             stream.write_all(b"Ok\n")?;
             loop {
-                let size = stream.read(&mut data[0..9])?;
+                const PACKET_SIZE: usize = 9;
+                let size = stream.read(&mut data[0..PACKET_SIZE])?;
                 if size == 0 {
                     break;
                 }
+                anyhow::ensure!(size == PACKET_SIZE, "Package to small");
                 let packet = PacketType::from_packet(&data[0..size]).ok_or(anyhow::anyhow!("Unknown packet type"))?;
                 devices.handle_packet(packet)?;
             }
