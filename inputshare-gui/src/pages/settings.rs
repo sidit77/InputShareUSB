@@ -1,5 +1,5 @@
 use crate::pages::{Page, ContainerStyle};
-use iced::{Element, Text, Column, Button, button, Row, Container, Space, Length, Color, Scrollable, scrollable, TextInput, text_input, Align};
+use iced::{Element, Text, Column, Button, button, Row, Container, Length, Scrollable, scrollable, TextInput, text_input};
 use crate::Message;
 use crate::config::Config;
 
@@ -62,7 +62,7 @@ impl Page for SettingsPage {
                 Row::new()
                     .spacing(8)
                     .push(Button::new(&mut self.save_button, Text::new("Save")).on_press(Message::SaveSettings))
-                    .push(Button::new(&mut self.discard_button, Text::new("Discard")).on_press(Message::SaveSettings))
+                    .push(Button::new(&mut self.discard_button, Text::new("Discard")).on_press(Message::DiscardSettings))
             )
             .into()
         //

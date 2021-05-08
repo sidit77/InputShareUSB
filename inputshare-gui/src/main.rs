@@ -1,8 +1,7 @@
 use crate::pages::default::DefaultPage;
-use iced::{Sandbox, Element, Text, Settings};
+use iced::{Sandbox, Element, Settings};
 use crate::pages::Page;
 use crate::pages::settings::SettingsPage;
-use std::num::ParseIntError;
 
 mod pages;
 mod config;
@@ -18,7 +17,7 @@ enum InputShareClient {
 
 
 #[derive(Debug, Clone)]
-enum Message {
+pub enum Message {
     OpenSettings,
     SaveSettings,
     DiscardSettings,
@@ -31,7 +30,7 @@ impl Sandbox for InputShareClient {
     type Message = Message;
 
     fn new() -> Self {
-        Self::DefaultPage(Default::default())
+        Self::DefaultPage(DefaultPage::new())
     }
 
     fn title(&self) -> String {
@@ -40,16 +39,16 @@ impl Sandbox for InputShareClient {
 
     fn update(&mut self, message: Message) {
         match self {
-            InputShareClient::DefaultPage(page) => match message {
+            InputShareClient::DefaultPage(_) => match message {
                 Message::OpenSettings => *self = InputShareClient::SettingsPage(SettingsPage::new()),
                 _ => {}
             },
             InputShareClient::SettingsPage(page) => match message {
                 Message::SaveSettings => {
                     page.config.save();
-                    *self = InputShareClient::DefaultPage(Default::default());
+                    *self = InputShareClient::DefaultPage(DefaultPage::new());
                 },
-                Message::DiscardSettings => *self = InputShareClient::DefaultPage(Default::default()),
+                Message::DiscardSettings => *self = InputShareClient::DefaultPage(DefaultPage::new()),
                 Message::ChangePortNumber(mut string) => {
                    string.insert(0, '0');
                     match string.parse() {
