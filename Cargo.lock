@@ -1303,9 +1303,11 @@ name = "inputshare-gui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitflags",
  "confy",
  "iced",
  "serde",
+ "yawi",
 ]
 
 [[package]]

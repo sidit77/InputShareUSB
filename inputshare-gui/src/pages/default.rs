@@ -9,12 +9,15 @@ use std::path::Display;
 use std::io::{Write, Read};
 use std::borrow::Cow;
 use std::time::Duration;
+use yawi::InputHook;
+use crate::client::create_client;
 
 #[derive(Default)]
 pub struct DefaultPage {
     config: Config,
     connection_status: String,
-    connection: Option<TcpStream>,
+    //connection: Option<TcpStream>,
+    hook: Option<InputHook<'static>>,
     refresh_button: button::State,
     shutdown_button: button::State,
     settings_button: button::State
@@ -56,15 +59,20 @@ impl DefaultPage {
     pub fn new() -> Self {
         let config = Config::load();
 
-        let (connection, connection_status) = match connect(config.host.as_str(), config.port){
-            Ok(connection) => (Some(connection), String::from("Connected")),
-            Err(err) => (None, err.to_string())
-        };
+        //let ( hook, connection_status) = match connect(config.host.as_str(), config.port){
+        //    Ok(connection) => (Some(create_client(connection)), String::from("Connected")),
+        //    Err(err) => (None, err.to_string())
+        //};
+
 
         Self {
             config,
-            connection,
-            connection_status,
+            //hook,
+            //connection_status,
+            hook: Some(InputHook::new(|even|  {
+                println!("Test");
+                true
+            })),
             ..Default::default()
         }
     }

@@ -5,6 +5,8 @@ use crate::pages::settings::SettingsPage;
 
 mod pages;
 mod config;
+mod hid;
+mod client;
 
 pub fn main() -> iced::Result {
     InputShareClient::run(Settings::default())
