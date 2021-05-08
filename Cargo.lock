@@ -1302,7 +1302,9 @@ dependencies = [
 name = "inputshare-gui"
 version = "0.1.0"
 dependencies = [
+ "confy",
  "iced",
+ "serde",
 ]
 
 [[package]]
