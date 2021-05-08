@@ -1,6 +1,5 @@
 [Unit]
-Description=Enable the InputShare server
-Requires=enable_hid.service
+Description=Enables the InputShare server
 After=multi-user.target enable_hid.service
 
 [Service]
@@ -9,4 +8,4 @@ ExecStart=/usr/bin/inputshare-server 12351 hardware
 Restart=on-failure
 
 [Install]
-WantedBy=multi-user.target1
+WantedBy=multi-user.target
