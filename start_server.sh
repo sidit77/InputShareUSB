@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./target/release/inputshare-server /dev/hidg0
+./target/release/inputshare-server 12351 hardware

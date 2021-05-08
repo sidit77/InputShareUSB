@@ -1310,8 +1310,6 @@ name = "inputshare-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "confy",
- "serde",
 ]
 
 [[package]]

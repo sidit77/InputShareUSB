@@ -7,6 +7,7 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
 use std::io::{Write, Read, stdin};
 use std::convert::TryFrom;
 use yawi::{VirtualKey, InputEvent, KeyState, ScrollDirection, Input, InputHook};
+use std::borrow::Cow;
 
 mod hid;
 mod config;
@@ -37,10 +38,9 @@ fn main(){
                 Ok(_) => {
                     println!("Successfully connected to server");
                     run(&mut stream);
-                    stream.shutdown(Shutdown::Both).unwrap();
                 },
-                Err(_) => {
-                    println!("An handshake error occurred, terminating connection");
+                Err(err) => {
+                    println!("{}", err);
                     stream.shutdown(Shutdown::Both).unwrap();
                 }
             }
@@ -50,28 +50,19 @@ fn main(){
 }
 
 fn do_handshake(stream: &mut TcpStream) -> anyhow::Result<()> {
-    println!("Starting handshake");
     let mut data = [0 as u8; 50];
+    println!("Starting handshake");
+    stream.write_all(b"Authenticate: InputShareUSB\n")?;
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    //stream.read_line(&mut buffer)?;
-    let buffer = read_string(stream, &mut data)?;
-    println!("Got: {}", buffer.trim());
-    if buffer.trim() != "Authenticate" {
-        anyhow::bail!("Wrong protocol!");
+    match read_string(stream, &mut data)?.trim(){
+        "Ok" => Ok(()),
+        s => Err(anyhow::bail!("{}", s))
     }
-    stream.write_all(b"secretPassword\n")?;
-    //stream.read_line(&mut buffer)?;
-    let buffer = read_string(stream, &mut data)?;
-    println!("Got: {}", buffer.trim());
-    if buffer.trim() != "Ok" {
-        anyhow::bail!("Wrong protocol!");
-    }
-    Ok(())
 }
 
-fn read_string(stream: &mut TcpStream, data: &mut [u8]) -> anyhow::Result<String> {
+fn read_string<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> anyhow::Result<Cow<'a, str>> {
     let read = stream.read(data)?;
-    Ok(String::from_utf8_lossy(&data[0..read]).to_string())
+    Ok(String::from_utf8_lossy(&data[0..read]))
 }
 
 const BLACKLIST: [VirtualKey; 7] = [
@@ -252,14 +243,18 @@ fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanC
 fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 9] {
     let mut packet = [0x0 as u8; 9];
     packet[0] = 0x2;
-    packet[1] = buttons.to_byte();
+    packet[1] = match (dx, dy) {
+        (0, 0) => 0x1,
+        _      => 0x2
+    };
+    packet[2] = buttons.to_byte();
     let dx = dx.to_le_bytes();
     let dy = dy.to_le_bytes();
-    packet[2] = dx[0];
-    packet[3] = dx[1];
-    packet[4] = dy[0];
-    packet[5] = dy[1];
-    packet[6] = dv as u8;
-    packet[7] = dh as u8;
+    packet[3] = dx[0];
+    packet[4] = dx[1];
+    packet[5] = dy[0];
+    packet[6] = dy[1];
+    packet[7] = dv as u8;
+    packet[8] = dh as u8;
     packet
 }
