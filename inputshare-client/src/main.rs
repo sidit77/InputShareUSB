@@ -56,7 +56,7 @@ fn do_handshake(stream: &mut TcpStream) -> anyhow::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
     match read_string(stream, &mut data)?.trim(){
         "Ok" => Ok(()),
-        s => Err(anyhow::bail!("{}", s))
+        s => Err(anyhow::anyhow!("{}", s))
     }
 }
 

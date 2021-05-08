@@ -182,7 +182,7 @@ fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow
             stream.set_read_timeout(None)?;
             stream.write_all(b"Ok\n")?;
             loop {
-                let size = stream.read(&mut data)?;
+                let size = stream.read(&mut data[0..9])?;
                 if size == 0 {
                     break;
                 }
