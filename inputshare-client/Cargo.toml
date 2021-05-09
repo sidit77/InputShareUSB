@@ -13,3 +13,4 @@ anyhow = "1.0"
 bitflags = "1.2.1"
 ctrlc = "3.1"
 yawi = { path = "../yawi" }
+inputshare-common = { path = "../inputshare-common" }

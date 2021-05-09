@@ -1294,9 +1294,14 @@ dependencies = [
  "bitflags",
  "confy",
  "ctrlc",
+ "inputshare-common",
  "serde",
  "yawi",
 ]
+
+[[package]]
+name = "inputshare-common"
+version = "0.1.0"
 
 [[package]]
 name = "inputshare-gui"
@@ -1315,6 +1320,7 @@ name = "inputshare-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "inputshare-common",
 ]
 
 [[package]]

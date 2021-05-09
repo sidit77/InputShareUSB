@@ -6,38 +6,33 @@ use std::str::FromStr;
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
 use std::borrow::Cow;
+use inputshare_common::{PackageIds, ReadExt, WriteExt};
 
 //TODO write zero into devices on error
 
-#[derive(Debug, Copy, Clone)]
-enum MousePacketType {
-    Movement, Default
-}
-
-impl MousePacketType {
-    fn from_u8(id: u8) -> Option<Self>{
-        match id {
-            0x1 => Some(MousePacketType::Default),
-            0x2 => Some(MousePacketType::Movement),
-            _   => None
-        }
-    }
-}
-
 #[derive(Debug)]
-enum PacketType<'a> {
-    Keyboard(&'a[u8]), Mouse(MousePacketType, &'a[u8])
+enum Packet<'a> {
+    Keyboard(&'a[u8]), Mouse(&'a[u8])
 }
 
-impl<'a> PacketType<'a> {
-    fn from_packet(packet: &'a[u8]) -> Option<Self> {
-        match packet[0] {
-            0x1 => Some(PacketType::Keyboard(&packet[1..9])),
-            0x2 => match MousePacketType::from_u8(packet[1]){
-                Some(mpt) => Some(PacketType::Mouse(mpt, &packet[2..9])),
-                None => None
-            },
-            _   => None
+trait ReadPacket {
+    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Packet<'a>>;
+}
+
+impl ReadPacket for TcpStream {
+    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Packet<'a>> {
+        match self.read_u8()? {
+            PackageIds::KEYBOARD => {
+                let msg = &mut buf[0..8];
+                self.read_exact(msg);
+                Ok(Packet::Keyboard(msg))
+            }
+            PackageIds::MOUSE => {
+                let msg = &mut buf[0..7];
+                self.read_exact(msg);
+                Ok(Packet::Mouse(msg))
+            }
+            _ => Err(anyhow::anyhow!("Unknown packet type!"))
         }
     }
 }
@@ -105,14 +100,14 @@ struct Devices {
 }
 
 impl Devices {
-    fn handle_packet(&mut self, packet: PacketType) -> anyhow::Result<()> {
+    fn handle_packet(&mut self, packet: Packet) -> anyhow::Result<()> {
         match packet {
-            PacketType::Keyboard(msg) => {
+            Packet::Keyboard(msg) => {
                 self.keyboard.write(msg)?;
                 Ok(())
             },
-            PacketType::Mouse(mpt, msg) => {
-                if matches!(mpt, MousePacketType::Movement) && matches!(self.mouse, Backend::Console(_)) {
+            Packet::Mouse(msg) => {
+                if has_mouse_movement(msg) && matches!(self.mouse, Backend::Console(_)) {
                     return Ok(())
                 }
                 self.mouse.write(msg)?;
@@ -120,6 +115,10 @@ impl Devices {
             }
         }
     }
+}
+
+fn has_mouse_movement(msg: &[u8]) -> bool {
+    msg[1..4].iter().any(|x|*x !=0 )
 }
 
 fn run_server(port: u16, backend_type: BackendType) -> anyhow::Result<()>{
@@ -170,27 +169,22 @@ fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> anyhow::Result<()
     Ok(())
 }
 
-fn read_string<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> anyhow::Result<Cow<'a, str>> {
-    let read = stream.read(data)?;
-    Ok(String::from_utf8_lossy(&data[0..read]))
-}
-
 fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow::Result<()>{
     let mut data = [0 as u8; 50];
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    anyhow::ensure!(read_string(stream, &mut data)?.trim() == "Authenticate: InputShareUSB", "Handshake error");
+    anyhow::ensure!(stream.read_string(&mut data)? == "Authenticate: InputShareUSB", "Handshake error");
     match devices.try_lock() {
         Ok(mut devices) => {
             stream.set_read_timeout(None)?;
-            stream.write_all(b"Ok\n")?;
+            stream.write_string("Ok")?;
             loop {
-                const PACKET_SIZE: usize = 9;
-                let size = stream.read(&mut data[0..PACKET_SIZE])?;
-                if size == 0 {
-                    break;
-                }
-                anyhow::ensure!(size == PACKET_SIZE, "Package to small");
-                let packet = PacketType::from_packet(&data[0..size]).ok_or(anyhow::anyhow!("Unknown packet type"))?;
+                //const PACKET_SIZE: usize = 9;
+                //stream.read_exact(&mut data[0..PACKET_SIZE])?;
+                //if size == 0 {
+                //    break;
+                //}
+                //anyhow::ensure!(size == PACKET_SIZE, "Package to small");
+                let packet = stream.read_packet(&mut data[..])?;//Packet::from_packet(&data[0..PACKET_SIZE]).ok_or(anyhow::anyhow!("Unknown packet type"))?;
                 devices.handle_packet(packet)?;
             }
             Ok(())

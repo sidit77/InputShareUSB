@@ -2,6 +2,7 @@
 members = [
     "inputshare-client",
     "inputshare-server",
+    "inputshare-common",
     "inputshare-gui",
     "yawi"
 ]

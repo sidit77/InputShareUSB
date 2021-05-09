@@ -7,14 +7,14 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
 use std::io::{Write, Read, stdin};
 use std::convert::TryFrom;
 use yawi::{VirtualKey, InputEvent, KeyState, ScrollDirection, Input, InputHook};
-use std::borrow::Cow;
+use std::borrow::{Cow, Borrow};
+use inputshare_common::{PackageIds, WriteExt, ReadExt};
 
 mod hid;
 mod config;
 
 fn main(){
     println!("Hello client!");
-
     let cfg = config::Config::load();
 
     let server = match std::env::var("REMOTE_OVERRIDE") {
@@ -52,17 +52,12 @@ fn main(){
 fn do_handshake(stream: &mut TcpStream) -> anyhow::Result<()> {
     let mut data = [0 as u8; 50];
     println!("Starting handshake");
-    stream.write_all(b"Authenticate: InputShareUSB\n")?;
+    stream.write_string("Authenticate: InputShareUSB")?;
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    match read_string(stream, &mut data)?.trim(){
+    match stream.read_string(&mut data)?.borrow() {
         "Ok" => Ok(()),
         s => Err(anyhow::anyhow!("{}", s))
     }
-}
-
-fn read_string<'a>(stream: &mut TcpStream, data: &'a mut [u8]) -> anyhow::Result<Cow<'a, str>> {
-    let read = stream.read(data)?;
-    Ok(String::from_utf8_lossy(&data[0..read]))
 }
 
 const BLACKLIST: [VirtualKey; 7] = [
@@ -230,7 +225,7 @@ fn run(stream: &mut TcpStream) {
 
 fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanCode)>>) -> [u8; 9] {
     let mut packet = [0x0 as u8; 9];
-    packet[0] = 0x1;
+    packet[0] = PackageIds::KEYBOARD;
     packet[1] = mods.to_byte();
     if let Some(pressed_keys) = keys{
         for i in 0..pressed_keys.len().min(6) {
@@ -240,21 +235,17 @@ fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanC
     packet
 }
 
-fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 9] {
-    let mut packet = [0x0 as u8; 9];
-    packet[0] = 0x2;
-    packet[1] = match (dx, dy) {
-        (0, 0) => 0x1,
-        _      => 0x2
-    };
-    packet[2] = buttons.to_byte();
+fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 8] {
+    let mut packet = [0x0 as u8; 8];
+    packet[0] = PackageIds::MOUSE;
+    packet[1] = buttons.to_byte();
     let dx = dx.to_le_bytes();
     let dy = dy.to_le_bytes();
-    packet[3] = dx[0];
-    packet[4] = dx[1];
-    packet[5] = dy[0];
-    packet[6] = dy[1];
-    packet[7] = dv as u8;
-    packet[8] = dh as u8;
+    packet[2] = dx[0];
+    packet[3] = dx[1];
+    packet[4] = dy[0];
+    packet[5] = dy[1];
+    packet[6] = dv as u8;
+    packet[7] = dh as u8;
     packet
 }

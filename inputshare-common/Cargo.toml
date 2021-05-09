@@ -1,5 +1,5 @@
 [package]
-name = "inputshare-server"
+name = "inputshare-common"
 version = "0.1.0"
 authors = ["sidit77 <sidit77@gmail.com>"]
 edition = "2018"
@@ -7,5 +7,3 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-inputshare-common = { path = "../inputshare-common" }
