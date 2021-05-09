@@ -1,11 +1,10 @@
 use std::fs::{OpenOptions, File};
-use std::io::{Write, Read, stdout};
+use std::io::{Write, Read, stdout, Error, ErrorKind};
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr};
 use std::str::FromStr;
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
-use std::borrow::Cow;
 use inputshare_common::{PackageIds, ReadExt, WriteExt};
 
 //TODO write zero into devices on error
@@ -15,27 +14,26 @@ enum Packet<'a> {
     Keyboard(&'a[u8]), Mouse(&'a[u8])
 }
 
-trait ReadPacket {
-    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Packet<'a>>;
-}
-
-impl ReadPacket for TcpStream {
-    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Packet<'a>> {
-        match self.read_u8()? {
+trait ReadPacket: Read {
+    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> std::io::Result<Packet<'a>> {
+        self.read_exact(&mut buf[0..1])?;
+        match buf[0] {
             PackageIds::KEYBOARD => {
                 let msg = &mut buf[0..8];
-                self.read_exact(msg);
+                self.read_exact(msg)?;
                 Ok(Packet::Keyboard(msg))
             }
             PackageIds::MOUSE => {
                 let msg = &mut buf[0..7];
-                self.read_exact(msg);
+                self.read_exact(msg)?;
                 Ok(Packet::Mouse(msg))
             }
-            _ => Err(anyhow::anyhow!("Unknown packet type!"))
+            _ => Err(Error::new(ErrorKind::InvalidData, "Unknown package identifier!"))
         }
     }
 }
+
+impl ReadPacket for TcpStream {}
 
 #[derive(Debug, Copy, Clone)]
 enum BackendType {
@@ -163,8 +161,8 @@ fn run_server(port: u16, backend_type: BackendType) -> anyhow::Result<()>{
     }
 }
 
-fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> anyhow::Result<()>{
-    stream.write_all(std::format!("{}", error).as_bytes())?;
+fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> std::io::Result<()>{
+    stream.write_string(std::format!("{}", error).as_str())?;
     stream.shutdown(Shutdown::Both)?;
     Ok(())
 }
@@ -178,14 +176,11 @@ fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow
             stream.set_read_timeout(None)?;
             stream.write_string("Ok")?;
             loop {
-                //const PACKET_SIZE: usize = 9;
-                //stream.read_exact(&mut data[0..PACKET_SIZE])?;
-                //if size == 0 {
-                //    break;
-                //}
-                //anyhow::ensure!(size == PACKET_SIZE, "Package to small");
-                let packet = stream.read_packet(&mut data[..])?;//Packet::from_packet(&data[0..PACKET_SIZE]).ok_or(anyhow::anyhow!("Unknown packet type"))?;
-                devices.handle_packet(packet)?;
+                match stream.read_packet(&mut data[..]){
+                    Ok(packet) => devices.handle_packet(packet)?,
+                    Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    Err(e) => Err(e)?
+                }
             }
             Ok(())
         }

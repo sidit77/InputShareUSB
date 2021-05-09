@@ -11,11 +11,6 @@ impl PackageIds {
 
 
 pub trait ReadExt: Read {
-    fn read_u8(&mut self) -> std::io::Result<u8> {
-        let mut buf = [0; 1];
-        self.read_exact(&mut buf)?;
-        Ok(buf[0])
-    }
 
     fn read_u16(&mut self) -> std::io::Result<u16> {
         let mut buf = [0; 2];

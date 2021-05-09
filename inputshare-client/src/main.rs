@@ -4,10 +4,10 @@ extern crate bitflags;
 use crate::hid::{HidModifierKeys, convert_win2hid, HidScanCode, HidMouseButtons};
 use std::time::Duration;
 use std::net::{ToSocketAddrs, SocketAddr, TcpStream, Shutdown};
-use std::io::{Write, Read, stdin};
+use std::io::{Write, stdin};
 use std::convert::TryFrom;
 use yawi::{VirtualKey, InputEvent, KeyState, ScrollDirection, Input, InputHook};
-use std::borrow::{Cow, Borrow};
+use std::borrow::Borrow;
 use inputshare_common::{PackageIds, WriteExt, ReadExt};
 
 mod hid;
