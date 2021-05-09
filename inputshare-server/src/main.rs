@@ -177,7 +177,10 @@ fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow
             stream.write_string("Ok")?;
             loop {
                 match stream.read_packet(&mut data[..]){
-                    Ok(packet) => devices.handle_packet(packet)?,
+                    Ok(packet) => match devices.handle_packet(packet) {
+                        Ok(_) => {}
+                        Err(err) => println!("Could not handle package: {}", err)
+                    },
                     Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                     Err(e) => Err(e)?
                 }
