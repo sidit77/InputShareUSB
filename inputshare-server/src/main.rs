@@ -1,7 +1,7 @@
 use std::fs::{OpenOptions, File};
 use std::io::{Write, Read, stdout, Error, ErrorKind};
 use std::time::Duration;
-use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr};
+use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr, Ipv4Addr};
 use std::str::FromStr;
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
@@ -50,7 +50,6 @@ impl FromStr for BackendType {
             "console" => Ok(BackendType::Console),
             _ => Err(anyhow::anyhow!("[{}] is a viable backend type. Supported types: [hardware, console]", s))
         }
-
     }
 }
 
@@ -87,8 +86,9 @@ fn main() -> anyhow::Result<()>{
         .ok_or(anyhow::anyhow!("Wrong number of arguments (USAGE: {} <PORT> <hardware | console>)", env!("CARGO_BIN_NAME")))?
         .parse()?;
 
-    run_server(port, backend_type)
+    run_server(port, backend_type)?;
 
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ struct Devices {
 }
 
 impl Devices {
-    fn handle_packet(&mut self, packet: Packet) -> anyhow::Result<()> {
+    fn handle_packet(&mut self, packet: Packet) -> std::io::Result<()> {
         match packet {
             Packet::Keyboard(msg) => {
                 self.keyboard.write(msg)?;
@@ -119,7 +119,7 @@ fn has_mouse_movement(msg: &[u8]) -> bool {
     msg[1..4].iter().any(|x|*x !=0 )
 }
 
-fn run_server(port: u16, backend_type: BackendType) -> anyhow::Result<()>{
+fn run_server(port: u16, backend_type: BackendType) -> std::io::Result<()>{
     println!("Opening backends");
     let devices = Arc::new(Mutex::new(
         match backend_type {
@@ -134,7 +134,7 @@ fn run_server(port: u16, backend_type: BackendType) -> anyhow::Result<()>{
         }
     ));
 
-    let listener = TcpListener::bind(SocketAddr::new(IpAddr::from_str("0.0.0.0")?, port))?;
+    let listener = TcpListener::bind(SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), port))?;
 
     println!("Listening on {}", listener.local_addr()?);
 
