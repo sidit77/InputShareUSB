@@ -1,16 +1,16 @@
 mod args;
+mod devices;
 
-use std::fs::{OpenOptions, File};
-use std::io::{Write, Read, stdout, Error, ErrorKind};
+use std::io::{Read, Error, ErrorKind};
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr, Ipv4Addr};
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
 use inputshare_common::{PackageIds, ReadExt, WriteExt};
-use crate::args::{BackendType, ServerArgs, parse_args};
+use crate::args::{BackendType, parse_args};
+use crate::devices::Devices;
 
 //TODO write zero into devices on error
-
 
 
 fn main() -> anyhow::Result<()>{
@@ -22,96 +22,9 @@ fn main() -> anyhow::Result<()>{
     Ok(())
 }
 
-#[derive(Debug)]
-enum Packet<'a> {
-    Keyboard(&'a[u8]), Mouse(&'a[u8])
-}
-
-trait ReadPacket: Read {
-    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> std::io::Result<Packet<'a>> {
-        self.read_exact(&mut buf[0..1])?;
-        match buf[0] {
-            PackageIds::KEYBOARD => {
-                let msg = &mut buf[0..8];
-                self.read_exact(msg)?;
-                Ok(Packet::Keyboard(msg))
-            }
-            PackageIds::MOUSE => {
-                let msg = &mut buf[0..7];
-                self.read_exact(msg)?;
-                Ok(Packet::Mouse(msg))
-            }
-            _ => Err(Error::new(ErrorKind::InvalidData, "Unknown package identifier!"))
-        }
-    }
-}
-
-impl ReadPacket for TcpStream {}
-
-#[derive(Debug)]
-enum Backend {
-    LinuxDevice(File),
-    Console(&'static str)
-}
-
-impl Write for Backend {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Backend::LinuxDevice(device) => device.write(buf),
-            Backend::Console(name) => {println!("{}: {:?}", name, buf); Ok(buf.len())}
-        }
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Backend::LinuxDevice(device) => device.flush(),
-            Backend::Console(_) => stdout().flush()
-        }
-    }
-}
-
-
-#[derive(Debug)]
-struct Devices {
-    keyboard: Backend,
-    mouse: Backend
-}
-
-impl Devices {
-    fn handle_packet(&mut self, packet: Packet) -> std::io::Result<()> {
-        match packet {
-            Packet::Keyboard(msg) => {
-                self.keyboard.write(msg)?;
-                Ok(())
-            },
-            Packet::Mouse(msg) => {
-                if has_mouse_movement(msg) && matches!(self.mouse, Backend::Console(_)) {
-                    return Ok(())
-                }
-                self.mouse.write(msg)?;
-                Ok(())
-            }
-        }
-    }
-}
-
-fn has_mouse_movement(msg: &[u8]) -> bool {
-    msg[1..4].iter().any(|x|*x !=0 )
-}
-
 fn run_server(port: u16, backend_type: BackendType) -> std::io::Result<()>{
     println!("Opening backends");
-    let devices = Arc::new(Mutex::new(
-        match backend_type {
-            BackendType::Hardware => Devices {
-                keyboard: Backend::LinuxDevice(OpenOptions::new().write(true).append(true).open("/dev/hidg0")?),
-                mouse: Backend::LinuxDevice(OpenOptions::new().write(true).append(true).open("/dev/hidg1")?)
-            },
-            BackendType::Console => Devices {
-                keyboard: Backend::Console("Keyboard"),
-                mouse: Backend::Console("Mouse")
-            }
-        }
-    ));
+    let devices = Arc::new(Mutex::new(Devices::from_backend_type(backend_type)?));
 
     let listener = TcpListener::bind(SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), port))?;
 
@@ -136,9 +49,39 @@ fn run_server(port: u16, backend_type: BackendType) -> std::io::Result<()>{
                 });
             },
             Err(e) => println!("{}", e)
-        };
+        }
     }
 }
+
+
+
+#[derive(Debug)]
+pub enum Packet<'a> {
+    Keyboard(&'a[u8]), Mouse(&'a[u8])
+}
+
+trait ReadPacket: Read {
+    fn read_packet<'a>(&mut self, buf: &'a mut [u8]) -> std::io::Result<Packet<'a>> {
+        self.read_exact(&mut buf[0..1])?;
+        match buf[0] {
+            PackageIds::KEYBOARD => {
+                let msg = &mut buf[0..8];
+                self.read_exact(msg)?;
+                Ok(Packet::Keyboard(msg))
+            }
+            PackageIds::MOUSE => {
+                let msg = &mut buf[0..7];
+                self.read_exact(msg)?;
+                Ok(Packet::Mouse(msg))
+            }
+            _ => Err(Error::new(ErrorKind::InvalidData, "Unknown package identifier!"))
+        }
+    }
+}
+
+impl ReadPacket for TcpStream {}
+
+
 
 fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> std::io::Result<()>{
     stream.write_string(std::format!("{}", error).as_str())?;
