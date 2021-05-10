@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
+pico-args = "0.4.1"
 inputshare-common = { path = "../inputshare-common" }

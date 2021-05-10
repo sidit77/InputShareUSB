@@ -1321,6 +1321,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "inputshare-common",
+ "pico-args",
 ]
 
 [[package]]
@@ -1833,6 +1834,12 @@ dependencies = [
  "fixedbitset",
  "indexmap",
 ]
+
+[[package]]
+name = "pico-args"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d7afeb98c5a10e0bffcc7fc16e105b04d06729fac5fd6384aebf7ff5cb5a67d"
 
 [[package]]
 name = "pin-project-lite"

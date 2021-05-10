@@ -1,13 +1,26 @@
+mod args;
+
 use std::fs::{OpenOptions, File};
 use std::io::{Write, Read, stdout, Error, ErrorKind};
 use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr, Ipv4Addr};
-use std::str::FromStr;
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
 use inputshare_common::{PackageIds, ReadExt, WriteExt};
+use crate::args::{BackendType, ServerArgs, parse_args};
 
 //TODO write zero into devices on error
+
+
+
+fn main() -> anyhow::Result<()>{
+
+    let args = parse_args()?;
+
+    run_server(args.port, args.backend)?;
+
+    Ok(())
+}
 
 #[derive(Debug)]
 enum Packet<'a> {
@@ -35,24 +48,6 @@ trait ReadPacket: Read {
 
 impl ReadPacket for TcpStream {}
 
-#[derive(Debug, Copy, Clone)]
-enum BackendType {
-    Hardware,
-    Console
-}
-
-impl FromStr for BackendType {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "hardware" => Ok(BackendType::Hardware),
-            "console" => Ok(BackendType::Console),
-            _ => Err(anyhow::anyhow!("[{}] is a viable backend type. Supported types: [hardware, console]", s))
-        }
-    }
-}
-
 #[derive(Debug)]
 enum Backend {
     LinuxDevice(File),
@@ -74,22 +69,6 @@ impl Write for Backend {
     }
 }
 
-fn main() -> anyhow::Result<()>{
-
-    let port: u16 = std::env::args()
-        .nth(1)
-        .ok_or(anyhow::anyhow!("Wrong number of arguments (USAGE: {} <PORT> <hardware | console>)", env!("CARGO_BIN_NAME")))?
-        .parse()?;
-
-    let backend_type: BackendType = std::env::args()
-        .nth(2)
-        .ok_or(anyhow::anyhow!("Wrong number of arguments (USAGE: {} <PORT> <hardware | console>)", env!("CARGO_BIN_NAME")))?
-        .parse()?;
-
-    run_server(port, backend_type)?;
-
-    Ok(())
-}
 
 #[derive(Debug)]
 struct Devices {
