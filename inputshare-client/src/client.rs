@@ -8,9 +8,7 @@ use byteorder::{WriteBytesExt, LittleEndian};
 use std::io;
 
 pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<()> {
-    let mut modifiers = HidModifierKeys::None;
-    let mut pressed_buttons = HidMouseButtons::None;
-    let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
+    let mut kb_state = KeyButtonState::new();
     let mut captured = false;
     let mut hotkey = HotKey::new(hotkey);
     let mut pos: Option<(i32, i32)> = None;
@@ -21,13 +19,13 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
                 captured = !captured;
                 println!("Captured: {}", captured);
                 if captured {
-                    set_local_state(&modifiers, &pressed_buttons, &pressed_keys, KeyState::Released).expect("could not send all keys");
-                    stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
-                    stream.write_packet(Packet::Mouse(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
+                    kb_state.change_local_state(ChangeType::Wipe).expect("could not send all keys");
+                    stream.write_packet(kb_state.create_keyboard_packet()).expect("Error sending packet");
+                    stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, 0)).expect("Error sending packet");
                 } else {
+                    kb_state.change_local_state(ChangeType::Restore).expect("could not send all keys");
                     stream.write_packet(Packet::reset_keyboard()).expect("Error sending packet");
                     stream.write_packet(Packet::reset_mouse()).expect("Error sending packet");
-                    set_local_state(&modifiers, &pressed_buttons, &pressed_keys, KeyState::Pressed).expect("could not send all keys");
                 }
             }
             return false;
@@ -37,93 +35,41 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
                 return true;
             }
         }
-        match event {
-            InputEvent::KeyboardKeyEvent(key, scancode, state) => {
-                let fresh = match HidModifierKeys::from_virtual_key(&key) {
-                    Some(m) => {
-                        let old = modifiers;
-                        match state {
-                            KeyState::Pressed => modifiers.insert(m),
-                            KeyState::Released => modifiers.remove(m)
-                        }
-                        modifiers != old
-                    }
-                    None => match convert_win2hid(&scancode) {
-                        Some(hid) => match state {
-                            KeyState::Pressed => match pressed_keys.iter().position(|(_, x)| *x == hid) {
-                                None => {
-                                    pressed_keys.push((key, hid));
-                                    true
-                                },
-                                Some(_) => false
-                            }
-                            KeyState::Released => match pressed_keys.iter().position(|(_, x)| *x == hid) {
-                                Some(index) => {
-                                    pressed_keys.remove(index);
-                                    true
-                                },
-                                None => false
-                            }
-                        }
-                        None => {
-                            println!("Unsupported key: {:?} ({:x?})", key, scancode);
-                            false
-                        }
-                    }
-                };
-
-                if captured {
-                    if fresh {
-                        stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
-                    }
-                    false
-                }else {
-                    true
-                }
-
+        if pos.is_none() {
+            if let InputEvent::MouseMoveEvent(px, py) = &event {
+                pos = Some((*px, *py));
+                return true;
             }
-            InputEvent::MouseButtonEvent(key, state) => {
-                match HidMouseButtons::from_virtual_key(&key){
-                    Some(mb) => match state {
-                        KeyState::Pressed => pressed_buttons.insert(mb),
-                        KeyState::Released => pressed_buttons.remove(mb),
-                    }
-                    None => println!("Unknown mouse button {:?}", key)
+        }
+        if kb_state.handle_event(&event) {
+            match event {
+                InputEvent::KeyboardKeyEvent(_, _, _) => if captured {
+                    stream.write_packet(kb_state.create_keyboard_packet()).expect("Error sending packet");
                 }
-                if captured {
-                    stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, 0, 0)).expect("Error sending packet");
+                InputEvent::MouseButtonEvent(_, _) => if captured {
+                    stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, 0)).expect("Error sending packet");
                 }
-                !captured
-            },
-            InputEvent::MouseWheelEvent(dir) => {
-                if captured {
+                InputEvent::MouseWheelEvent(dir) => if captured {
                     match dir {
-                        ScrollDirection::Horizontal(am) => stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, 0, am as i8)).expect("Error sending packet"),
-                        ScrollDirection::Vertical(am) => stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, am as i8, 0)).expect("Error sending packet")
+                        ScrollDirection::Horizontal(am) => stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, am as i8)).expect("Error sending packet"),
+                        ScrollDirection::Vertical(am) => stream.write_packet(kb_state.create_mouse_packet(0, 0, am as i8, 0)).expect("Error sending packet")
                     }
                 }
-                !captured
-            },
-            InputEvent::MouseMoveEvent(px, py) => {
-                if pos.is_none() {
-                    pos = Some((px, py));
-                    return true;
-                }
-                if captured {
+                InputEvent::MouseMoveEvent(px, py) => if captured {
                     let (dx, dy) = match pos {
                         None => (0, 0),
                         Some((ox, oy)) => (px - ox, py - oy)
                     };
                     let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
                     if dx != 0 || dy != 0 {
-                        stream.write_packet(Packet::Mouse(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
+                        stream.write_packet(kb_state.create_mouse_packet(dx, dy, 0, 0)).expect("Error sending packet");
                     }
                 } else {
                     pos = Some((px, py));
                 }
-                !captured
             }
         }
+        !captured
     });
 
     let quitter = yawi::Quitter::from_current_thread();
@@ -147,6 +93,105 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
     yawi::run();
 
     Ok(())
+}
+
+struct KeyButtonState {
+    modifiers: HidModifierKeys,
+    pressed_buttons: HidMouseButtons,
+    pressed_keys: Vec::<(VirtualKey, HidScanCode)>
+}
+
+impl KeyButtonState {
+
+    fn new() -> Self {
+        Self {
+            modifiers: HidModifierKeys::None,
+            pressed_buttons: HidMouseButtons::None,
+            pressed_keys: Vec::new()
+        }
+    }
+
+    fn create_keyboard_packet(&self) -> Packet {
+        Packet::Keyboard(self.modifiers, self.pressed_keys.iter().rev().take(6).rev()
+            .fold(([None; 6], 0), |(mut acc, i), n|{
+                acc[i] = Some(n.1);
+                (acc, i + 1)
+            }).0)
+    }
+
+    fn create_mouse_packet(&self, dx: i16, dy: i16, dv: i8, dh: i8) -> Packet {
+        Packet::Mouse(self.pressed_buttons, dx, dy, dv, dh)
+    }
+
+    fn handle_event(&mut self, event: &InputEvent) -> bool{
+        match event {
+            InputEvent::KeyboardKeyEvent(key, scancode, state) => match HidModifierKeys::from_virtual_key(&key) {
+                Some(m) => {
+                    let old = self.modifiers;
+                    match state {
+                        KeyState::Pressed => self.modifiers.insert(m),
+                        KeyState::Released => self.modifiers.remove(m)
+                    }
+                    self.modifiers != old
+                }
+                None => match convert_win2hid(&scancode) {
+                    Some(hid) => match state {
+                        KeyState::Pressed => match self.pressed_keys.iter().position(|(_, x)| *x == hid) {
+                            None => {
+                                self.pressed_keys.push((*key, hid));
+                                true
+                            },
+                            Some(_) => false
+                        }
+                        KeyState::Released => match self.pressed_keys.iter().position(|(_, x)| *x == hid) {
+                            Some(index) => {
+                                self.pressed_keys.remove(index);
+                                true
+                            },
+                            None => false
+                        }
+                    }
+                    None => {
+                        println!("Unsupported key: {:?} ({:x?})", key, scancode);
+                        false
+                    }
+                }
+
+            },
+            InputEvent::MouseButtonEvent(key, state) => match HidMouseButtons::from_virtual_key(&key){
+                Some(mb) => {
+                    let old = self.pressed_buttons;
+                    match state {
+                        KeyState::Pressed => self.pressed_buttons.insert(mb),
+                        KeyState::Released => self.pressed_buttons.remove(mb)
+                    }
+                    old != self.pressed_buttons
+                },
+                None => {
+                    println!("Unknown mouse button {:?}", key);
+                    false
+                }
+            },
+            _ => true
+        }
+    }
+
+    fn change_local_state(&self, change: ChangeType)  -> anyhow::Result<()> {
+        let state = match change {
+            ChangeType::Wipe => KeyState::Released,
+            ChangeType::Restore => KeyState::Pressed
+        };
+        let mut k = self.modifiers.to_virtual_keys();
+        k.extend(self.pressed_keys.iter().map(|(x, _)|x));
+        let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, state)).collect();
+        k.extend(self.pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, state)));
+        yawi::send_inputs(k.as_slice())
+    }
+
+}
+
+enum ChangeType {
+    Wipe, Restore
 }
 
 struct HotKey {
@@ -180,19 +225,6 @@ impl HotKey {
     }
 }
 
-fn set_local_state(
-    modifiers: &HidModifierKeys,
-    pressed_buttons: &HidMouseButtons,
-    pressed_keys: &Vec<(VirtualKey, HidScanCode)>,
-    state: KeyState) -> anyhow::Result<()> {
-
-    let mut k = modifiers.to_virtual_keys();
-    k.extend(pressed_keys.iter().map(|(x, _)|x));
-    let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, state)).collect();
-    k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, state)));
-    yawi::send_inputs(k.as_slice())
-}
-
 #[derive(Debug)]
 enum Packet {
     Keyboard(HidModifierKeys, [Option<HidScanCode>; 6]),
@@ -200,13 +232,6 @@ enum Packet {
 }
 
 impl Packet {
-    fn from_key_list(mods: HidModifierKeys, keys: &Vec<(VirtualKey, HidScanCode)>) -> Self{
-        Packet::Keyboard(mods, keys.iter().rev().take(6).rev()
-            .fold(([None; 6], 0), |(mut acc, i), n|{
-                acc[i] = Some(n.1);
-                (acc, i + 1)
-            }).0)
-    }
     fn reset_keyboard() -> Self {
         Packet::Keyboard(HidModifierKeys::None, [None; 6])
     }
