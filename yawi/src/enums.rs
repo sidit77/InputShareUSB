@@ -1,4 +1,7 @@
 use std::convert::{TryFrom, TryInto};
+use std::fmt::{Display, Formatter};
+use std::fmt;
+
 
 pub type WindowsScanCode = u16;
 
@@ -69,6 +72,7 @@ pub enum KeyState {
 ///
 /// See [Virtual-Key Codes](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx) for more information.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum VirtualKey {
     LButton                      = 0x01,
@@ -297,6 +301,20 @@ pub enum VirtualKey {
     Noname                       = 0xFC,
     Pa1                          = 0xFD,
     OemClear                     = 0xFE
+}
+
+//#[cfg(feature = "serde")]
+//impl Serialize for VirtualKey {
+//    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error> where S: Serializer {
+//        todo!()
+//    }
+//}
+
+impl Display for VirtualKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+
+        write!(f, "{}", format!("{:?}", self).trim_start_matches("Key"))
+    }
 }
 
 const INVALID_KEYS: [u8; 60] = [

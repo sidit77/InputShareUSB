@@ -1,4 +1,7 @@
+use yawi::VirtualKey;
 
 fn main() {
-    println!("Hello World!");
+
+    println!("{:?}", VirtualKey::Key2);
+    println!("{}", VirtualKey::Key2);
 }
