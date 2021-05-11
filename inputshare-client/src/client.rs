@@ -32,11 +32,13 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
             }
             return false;
         }
+        if let Some(event) = event.to_key_event() {
+            if blacklist.contains(&event.key){
+                return true;
+            }
+        }
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
-                if blacklist.contains(&key){
-                    return true;
-                }
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
                     Some(m) => {
                         let old = modifiers;
@@ -160,14 +162,9 @@ impl HotKey {
         }
     }
     fn triggered(&mut self, event: &InputEvent) -> Option<bool> {
-        let event = match event {
-            InputEvent::KeyboardKeyEvent(key, _, state) => Some((*key, *state)),
-            InputEvent::MouseButtonEvent(key, state) => Some((*key, *state)),
-            _ => None
-        };
-        if let Some((key, state)) = event {
-            if self.key == key {
-                match state {
+        if let Some(event) = event.to_key_event() {
+            if self.key == event.key {
+                match event.state {
                     KeyState::Pressed => {
                         if self.available {
                             self.available = false;
