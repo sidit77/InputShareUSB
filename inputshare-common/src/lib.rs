@@ -3,6 +3,8 @@ use std::io::{Read, Write, ErrorKind, Error};
 use std::borrow::Cow;
 use std::convert::TryInto;
 
+pub const DEFAULT_PORT: u16 = 60067;
+
 pub struct PackageIds {}
 impl PackageIds {
     pub const KEYBOARD: u8 = 0x1;

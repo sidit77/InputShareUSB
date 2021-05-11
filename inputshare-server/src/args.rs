@@ -1,14 +1,17 @@
 use std::str::FromStr;
+use inputshare_common::DEFAULT_PORT;
 
-const HELP: &str = concat!("\
+fn print_help() {
+    println!("\
 USAGE:
-  inputshare-server [OPTIONS]
+  {} [OPTIONS]
 FLAGS:
   -h, --help            Prints help information
   --console             Prints the packages instead of using them
 OPTIONS:
-  --port PORT           Sets the port [default: 60067]
-");
+  --port PORT           Sets the port [default: {}]",
+             env!("CARGO_BIN_NAME"), DEFAULT_PORT)
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum BackendType {
@@ -38,12 +41,12 @@ pub fn parse_args() -> Result<ServerArgs, pico_args::Error> {
     let mut pargs = pico_args::Arguments::from_env();
 
     if pargs.contains(["-h", "--help"]) {
-        print!("{}", HELP);
+        print_help();
         std::process::exit(0);
     }
 
     let args = ServerArgs {
-        port: pargs.opt_value_from_str("--port")?.unwrap_or(60067),
+        port: pargs.opt_value_from_str("--port")?.unwrap_or(DEFAULT_PORT),
         backend: match pargs.contains("--console") {
             true => BackendType::Console,
             false => BackendType::Hardware
