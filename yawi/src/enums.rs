@@ -5,6 +5,13 @@ use std::fmt;
 
 pub type WindowsScanCode = u16;
 
+/// An event that represent the state change of a key or mouse button.
+/// Created by calling `to_key_event()` on a `InputEvent`
+pub struct KeyEvent {
+    pub key: VirtualKey,
+    pub state: KeyState
+}
+
 /// Possible input events
 #[derive(Copy, Clone, Debug)]
 pub enum InputEvent {
@@ -20,6 +27,25 @@ pub enum InputEvent {
     ///
     /// x,y - the new coordinates in pixels
     MouseMoveEvent(i32, i32)
+}
+
+impl InputEvent {
+
+    /// Return `Some(KeyEvent)` if the `InputEvent` is either `KeyboardKeyEvent` or `MouseButtonEvent`
+    /// and `None` otherwise
+    pub fn to_key_event(&self) -> Option<KeyEvent> {
+        match self {
+            InputEvent::KeyboardKeyEvent(key, _, state) => Some(KeyEvent{
+                key: *key,
+                state: *state
+            }),
+            InputEvent::MouseButtonEvent(key, state) => Some(KeyEvent{
+                key: *key,
+                state: *state
+            }),
+            _ => None
+        }
+    }
 }
 
 /// This enum describes the kind of input event that should be simulated
