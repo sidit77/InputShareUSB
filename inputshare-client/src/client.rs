@@ -12,40 +12,30 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
     let mut pressed_buttons = HidMouseButtons::None;
     let mut pressed_keys = Vec::<(VirtualKey, HidScanCode)>::new();
     let mut captured = false;
-    let mut hk_available = true;
+    let mut hotkey = HotKey::new(hotkey);
     let mut pos: Option<(i32, i32)> = None;
 
     let _hook = InputHook::new(|event|{
+        if let Some(triggered) = hotkey.triggered(&event) {
+            if triggered {
+                captured = !captured;
+                println!("Captured: {}", captured);
+                if captured {
+                    set_local_state(&modifiers, &pressed_buttons, &pressed_keys, KeyState::Released).expect("could not send all keys");
+                    stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
+                    stream.write_packet(Packet::Mouse(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
+                } else {
+                    stream.write_packet(Packet::reset_keyboard()).expect("Error sending packet");
+                    stream.write_packet(Packet::reset_mouse()).expect("Error sending packet");
+                    set_local_state(&modifiers, &pressed_buttons, &pressed_keys, KeyState::Pressed).expect("could not send all keys");
+                }
+            }
+            return false;
+        }
         match event {
             InputEvent::KeyboardKeyEvent(key, scancode, state) => {
                 if blacklist.contains(&key){
                     return true;
-                }
-                if key == hotkey{
-                    match state {
-                        KeyState::Pressed => if hk_available {
-                            hk_available = false;
-                            captured = !captured;
-                            println!("Captured: {}", captured);
-                            let mut k = modifiers.to_virtual_keys();
-                            k.extend(pressed_keys.iter().map(|(x, _)|x));
-                            if captured {
-                                let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
-                                k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
-                                yawi::send_inputs(k.as_slice()).expect("could not send all keys");
-                                stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
-                                stream.write_packet(Packet::Mouse(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
-                            } else {
-                                stream.write_packet(Packet::reset_keyboard()).expect("Error sending packet");
-                                stream.write_packet(Packet::reset_mouse()).expect("Error sending packet");
-                                let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
-                                k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
-                                yawi::send_inputs(k.as_slice()).expect("could not send all keys");
-                            }
-                        }
-                        KeyState::Released => hk_available = true
-                    }
-                    return false;
                 }
                 let fresh = match HidModifierKeys::from_virtual_key(&key) {
                     Some(m) => {
@@ -157,7 +147,54 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
     Ok(())
 }
 
+struct HotKey {
+    key: VirtualKey,
+    available: bool
+}
 
+impl HotKey {
+    fn new(key: VirtualKey) -> Self {
+        Self{
+            key,
+            available: true
+        }
+    }
+    fn triggered(&mut self, event: &InputEvent) -> Option<bool> {
+        let event = match event {
+            InputEvent::KeyboardKeyEvent(key, _, state) => Some((*key, *state)),
+            InputEvent::MouseButtonEvent(key, state) => Some((*key, *state)),
+            _ => None
+        };
+        if let Some((key, state)) = event {
+            if self.key == key {
+                match state {
+                    KeyState::Pressed => {
+                        if self.available {
+                            self.available = false;
+                            return Some(true);
+                        }
+                    },
+                    KeyState::Released => self.available = true
+                }
+                return Some(false)
+            }
+        }
+        None
+    }
+}
+
+fn set_local_state(
+    modifiers: &HidModifierKeys,
+    pressed_buttons: &HidMouseButtons,
+    pressed_keys: &Vec<(VirtualKey, HidScanCode)>,
+    state: KeyState) -> anyhow::Result<()> {
+
+    let mut k = modifiers.to_virtual_keys();
+    k.extend(pressed_keys.iter().map(|(x, _)|x));
+    let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, state)).collect();
+    k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, state)));
+    yawi::send_inputs(k.as_slice())
+}
 
 #[derive(Debug)]
 enum Packet {
