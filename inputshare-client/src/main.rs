@@ -13,6 +13,7 @@ mod config;
 mod client;
 
 fn main() -> anyhow::Result<()>{
+
     println!("Starting client");
     let cfg = config::Config::load().unwrap();
 

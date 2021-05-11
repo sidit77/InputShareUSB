@@ -4,6 +4,8 @@ use crate::hid::{HidScanCode, HidMouseButtons, HidModifierKeys, convert_win2hid}
 use std::io::{Write, stdin};
 use std::convert::TryFrom;
 use inputshare_common::PackageIds;
+use byteorder::{WriteBytesExt, LittleEndian};
+use std::io;
 
 pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<()> {
     let mut modifiers = HidModifierKeys::None;
@@ -31,11 +33,11 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
                                 let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Released)).collect();
                                 k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Released)));
                                 yawi::send_inputs(k.as_slice()).expect("could not send all keys");
-                                stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
-                                stream.write_all(&make_ms_packet(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
+                                stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
+                                stream.write_packet(Packet::Mouse(pressed_buttons, 0,0,0,0)).expect("Error sending packet");
                             } else {
-                                stream.write_all(&make_kb_packet(HidModifierKeys::None, None)).expect("Error sending packet");
-                                stream.write_all(&make_ms_packet(HidMouseButtons::None, 0, 0, 0, 0)).expect("Error sending packet");
+                                stream.write_packet(Packet::reset_keyboard()).expect("Error sending packet");
+                                stream.write_packet(Packet::reset_mouse()).expect("Error sending packet");
                                 let mut k: Vec<Input> = k.into_iter().map(|key|Input::KeyboardKeyInput(key, KeyState::Pressed)).collect();
                                 k.extend(pressed_buttons.to_virtual_keys().into_iter().map(|key|Input::MouseButtonInput(key, KeyState::Pressed)));
                                 yawi::send_inputs(k.as_slice()).expect("could not send all keys");
@@ -80,10 +82,7 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
 
                 if captured {
                     if fresh {
-                        //println!("{:x?}", packet);
-                        //sender.send(Packet::reliable_unordered(server, Vec::from(packet))).unwrap();
-                        stream.write_all(&make_kb_packet(modifiers, Some(&pressed_keys))).expect("Error sending packet");
-                        //println!("{:?} - {:x?}", modifiers, pressed_keys);
+                        stream.write_packet(Packet::from_key_list(modifiers, &pressed_keys)).expect("Error sending packet");
                     }
                     false
                 }else {
@@ -100,15 +99,15 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
                     None => println!("Unknown mouse button {:?}", key)
                 }
                 if captured {
-                    stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, 0, 0)).expect("Error sending packet");
+                    stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, 0, 0)).expect("Error sending packet");
                 }
                 !captured
             },
             InputEvent::MouseWheelEvent(dir) => {
                 if captured {
                     match dir {
-                        ScrollDirection::Horizontal(am) => stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, 0, am as i8)).expect("Error sending packet"),
-                        ScrollDirection::Vertical(am) => stream.write_all(&make_ms_packet(pressed_buttons, 0, 0, am as i8, 0)).expect("Error sending packet")
+                        ScrollDirection::Horizontal(am) => stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, 0, am as i8)).expect("Error sending packet"),
+                        ScrollDirection::Vertical(am) => stream.write_packet(Packet::Mouse(pressed_buttons, 0, 0, am as i8, 0)).expect("Error sending packet")
                     }
                 }
                 !captured
@@ -125,7 +124,7 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
                     };
                     let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
                     if dx != 0 || dy != 0 {
-                        stream.write_all(&make_ms_packet(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
+                        stream.write_packet(Packet::Mouse(pressed_buttons, dx, dy, 0, 0)).expect("Error sending packet");
                     }
                 } else {
                     pos = Some((px, py));
@@ -158,29 +157,56 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
     Ok(())
 }
 
-fn make_kb_packet(mods: HidModifierKeys, keys: Option<&Vec<(VirtualKey, HidScanCode)>>) -> [u8; 9] {
-    let mut packet = [0x0 as u8; 9];
-    packet[0] = PackageIds::KEYBOARD;
-    packet[1] = mods.to_byte();
-    if let Some(pressed_keys) = keys{
-        for i in 0..pressed_keys.len().min(6) {
-            packet[3 + i] = pressed_keys[0.max(pressed_keys.len() as i32 - 6) as usize + i].1;
-        }
-    }
-    packet
+
+
+#[derive(Debug)]
+enum Packet {
+    Keyboard(HidModifierKeys, [Option<HidScanCode>; 6]),
+    Mouse(HidMouseButtons, i16, i16, i8, i8)
 }
 
-fn make_ms_packet(buttons: HidMouseButtons, dx: i16, dy: i16, dv: i8, dh: i8) -> [u8; 8] {
-    let mut packet = [0x0 as u8; 8];
-    packet[0] = PackageIds::MOUSE;
-    packet[1] = buttons.to_byte();
-    let dx = dx.to_le_bytes();
-    let dy = dy.to_le_bytes();
-    packet[2] = dx[0];
-    packet[3] = dx[1];
-    packet[4] = dy[0];
-    packet[5] = dy[1];
-    packet[6] = dv as u8;
-    packet[7] = dh as u8;
-    packet
+impl Packet {
+    fn from_key_list(mods: HidModifierKeys, keys: &Vec<(VirtualKey, HidScanCode)>) -> Self{
+        Packet::Keyboard(mods, keys.iter().rev().take(6).rev()
+            .fold(([None; 6], 0), |(mut acc, i), n|{
+                acc[i] = Some(n.1);
+                (acc, i + 1)
+            }).0)
+    }
+    fn reset_keyboard() -> Self {
+        Packet::Keyboard(HidModifierKeys::None, [None; 6])
+    }
+    fn reset_mouse() -> Self {
+        Packet::Mouse(HidMouseButtons::None, 0, 0, 0, 0)
+    }
 }
+
+trait WritePacket: Write {
+    fn write_packet(&mut self, packet: Packet) -> io::Result<()>{
+        match packet {
+            Packet::Keyboard(modifiers, keys) => {
+                self.write_u8(PackageIds::KEYBOARD)?;
+                self.write_u8(modifiers.to_byte())?;
+                self.write_u8(0)?;
+                for key in &keys {
+                    match key {
+                        None => self.write_u8(0)?,
+                        Some(kc) => self.write_u8(*kc)?
+                    }
+                }
+                self.flush()
+            }
+            Packet::Mouse(buttons, dx, dy, dv, dh) => {
+                self.write_u8(PackageIds::MOUSE)?;
+                self.write_u8(buttons.to_byte())?;
+                self.write_i16::<LittleEndian>(dx)?;
+                self.write_i16::<LittleEndian>(dy)?;
+                self.write_i8(dv)?;
+                self.write_i8(dh)?;
+                self.flush()
+            }
+        }
+    }
+}
+
+impl WritePacket for TcpStream {}
