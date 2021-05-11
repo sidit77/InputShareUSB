@@ -36,8 +36,8 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
             }
         }
         if pos.is_none() {
-            if let InputEvent::MouseMoveEvent(px, py) = &event {
-                pos = Some((*px, *py));
+            if let InputEvent::MouseMoveEvent(px, py) = event {
+                pos = Some((px, py));
                 return true;
             }
         }

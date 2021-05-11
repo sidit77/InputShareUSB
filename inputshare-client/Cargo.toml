@@ -3,6 +3,7 @@ name = "inputshare-client"
 version = "0.1.0"
 authors = ["sidit77 <sidit77@gmail.com>"]
 edition = "2018"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,3 +17,6 @@ byteorder = "1.4"
 ctrlc = "3.1"
 yawi = { path = "../yawi", features = ["serde"] }
 inputshare-common = { path = "../inputshare-common" }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
