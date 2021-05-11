@@ -9,8 +9,9 @@ edition = "2018"
 [dependencies]
 confy = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
+pico-args = "0.4.1"
 anyhow = "1.0"
 bitflags = "1.2.1"
 ctrlc = "3.1"
-yawi = { path = "../yawi" }
+yawi = { path = "../yawi", features = ["serde"] }
 inputshare-common = { path = "../inputshare-common" }

@@ -15,11 +15,13 @@ mod config;
 
 fn main(){
     println!("Hello client!");
-    let cfg = config::Config::load();
+    let cfg = config::Config::load().unwrap();
+
+    println!("{}", cfg.merged_address());
 
     let server = match std::env::var("REMOTE_OVERRIDE") {
         Ok(s) => s.parse().expect("Can not parse address given with REMOTE_OVERRIDE"),
-        Err(_) => cfg.remote_address
+        Err(_) => cfg.merged_address()
             .to_socket_addrs()
             .expect("Unable to resolve domain")
             .filter(|x|match x {

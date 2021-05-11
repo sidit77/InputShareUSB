@@ -1,2 +1,11 @@
-local_address = '0.0.0.0:0'
-remote_address = 'raspberrypi.local:12351'
+host_address = 'raspberrypi.local:60067'
+hotkey = 'Apps'
+backlist = [
+    'VolumeDown',
+    'VolumeUp',
+    'VolumeMute',
+    'MediaStop',
+    'MediaPrevTrack',
+    'MediaPlayPause',
+    'MediaNextTrack',
+]

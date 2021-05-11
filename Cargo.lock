@@ -1295,6 +1295,7 @@ dependencies = [
  "confy",
  "ctrlc",
  "inputshare-common",
+ "pico-args",
  "serde",
  "yawi",
 ]
@@ -2798,5 +2799,6 @@ name = "yawi"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
  "winapi 0.3.9",
 ]
