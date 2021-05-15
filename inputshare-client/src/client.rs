@@ -6,6 +6,8 @@ use std::convert::TryFrom;
 use inputshare_common::PackageIds;
 use byteorder::{WriteBytesExt, LittleEndian};
 use std::io;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc;
 
 pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<()> {
     let mut kb_state = KeyButtonState::new();
@@ -72,23 +74,14 @@ pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<Vi
         !captured
     });
 
-    let quitter = yawi::Quitter::from_current_thread();
-    ctrlc::set_handler(move ||{
-        quitter.quit();
-        println!("Stopping!");
-    }).expect("Cant set ctrl c handler!");
-
-    let quitter = yawi::Quitter::from_current_thread();
-    std::thread::spawn(move || {
-        let mut s = String::new();
-        loop {
-            stdin().read_line(&mut s).expect("Cant read stdin!");
-            if s.trim().eq("stop") {
-                break;
-            }
-        }
-        quitter.quit();
-    });
+    //{
+    //    let quitter = yawi::Quitter::from_current_thread();
+    //    let quit_signal = get_quit_signals();
+    //    std::thread::spawn(move || {
+    //        quit_signal.recv().unwrap();
+    //        quitter.quit();
+    //    });
+    //}
 
     yawi::run();
 
@@ -226,21 +219,21 @@ impl HotKey {
 }
 
 #[derive(Debug)]
-enum Packet {
+pub enum Packet {
     Keyboard(HidModifierKeys, [Option<HidScanCode>; 6]),
     Mouse(HidMouseButtons, i16, i16, i8, i8)
 }
 
 impl Packet {
-    fn reset_keyboard() -> Self {
+    pub fn reset_keyboard() -> Self {
         Packet::Keyboard(HidModifierKeys::None, [None; 6])
     }
-    fn reset_mouse() -> Self {
+    pub fn reset_mouse() -> Self {
         Packet::Mouse(HidMouseButtons::None, 0, 0, 0, 0)
     }
 }
 
-trait WritePacket: Write {
+pub trait WritePacket: Write {
     fn write_packet(&mut self, packet: Packet) -> io::Result<()>{
         match packet {
             Packet::Keyboard(modifiers, keys) => {
@@ -269,3 +262,4 @@ trait WritePacket: Write {
 }
 
 impl WritePacket for TcpStream {}
+impl WritePacket for mio::net::TcpStream {}

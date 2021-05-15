@@ -15,6 +15,8 @@ anyhow = "1.0"
 bitflags = "1.2"
 byteorder = "1.4"
 ctrlc = "3.1"
+mio = "0.6"
+mio-extras = "2.0"
 yawi = { path = "../yawi", features = ["serde"] }
 inputshare-common = { path = "../inputshare-common" }
 

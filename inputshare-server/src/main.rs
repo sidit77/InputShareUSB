@@ -11,7 +11,7 @@ use crate::args::{BackendType, parse_args};
 use crate::devices::Devices;
 
 //TODO write zero into devices on error
-
+//TODO just drop the connection
 
 fn main() -> anyhow::Result<()>{
 
