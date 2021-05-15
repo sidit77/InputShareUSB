@@ -7,6 +7,7 @@ pub type WindowsScanCode = u16;
 
 /// An event that represent the state change of a key or mouse button.
 /// Created by calling `to_key_event()` on a `InputEvent`
+#[derive(Copy, Clone, Debug)]
 pub struct KeyEvent {
     pub key: VirtualKey,
     pub state: KeyState
