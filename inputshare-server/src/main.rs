@@ -40,10 +40,7 @@ fn run_server(port: u16, backend_type: BackendType) -> std::io::Result<()>{
                         Ok(_) => println!("{} disconnected!", addr),
                         Err(err) => {
                             println!("{}\nDisconnecting {}!", err, addr);
-                            match disconnect(&mut stream, err){
-                                Ok(_) => {}
-                                Err(err) => println!("{}", err)
-                            }
+                            let _ = stream.write_string(std::format!("{}", err).as_str());
                         }
                     }
                 });
@@ -84,8 +81,7 @@ impl ReadPacket for TcpStream {}
 
 
 fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> std::io::Result<()>{
-    stream.write_string(std::format!("{}", error).as_str())?;
-    stream.shutdown(Shutdown::Both)?;
+
     Ok(())
 }
 
