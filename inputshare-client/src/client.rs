@@ -1,91 +1,167 @@
 use std::net::TcpStream;
-use yawi::{VirtualKey, InputHook, KeyState, InputEvent, Input, ScrollDirection};
+use yawi::{VirtualKey, InputHook, KeyState, InputEvent, Input, ScrollDirection, Quitter};
 use crate::hid::{HidScanCode, HidMouseButtons, HidModifierKeys, convert_win2hid};
 use std::io::{Write, stdin};
 use std::convert::TryFrom;
 use inputshare_common::PackageIds;
 use byteorder::{WriteBytesExt, LittleEndian};
 use std::io;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::mpsc;
+use std::thread::JoinHandle;
+use mio_extras::channel::{Receiver, channel, Sender};
+use std::sync::mpsc::{TryRecvError, RecvError, RecvTimeoutError};
+use std::time::{Duration, Instant};
+use mio::{Evented, Ready, PollOpt, Poll, Token};
 
-pub fn run_client(stream: &mut TcpStream, hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<()> {
-    let mut kb_state = KeyButtonState::new();
-    let mut captured = false;
-    let mut hotkey = HotKey::new(hotkey);
-    let mut pos: Option<(i32, i32)> = None;
+enum ClientEvent {
+    SuccessfullyRegistration(Quitter),
+    Packet(Packet)
+}
 
-    let _hook = InputHook::new(|event|{
-        if let Some(triggered) = hotkey.triggered(&event) {
-            if triggered {
-                captured = !captured;
-                println!("Captured: {}", captured);
-                if captured {
-                    kb_state.change_local_state(ChangeType::Wipe).expect("could not send all keys");
-                    stream.write_packet(kb_state.create_keyboard_packet()).expect("Error sending packet");
-                    stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, 0)).expect("Error sending packet");
-                } else {
-                    kb_state.change_local_state(ChangeType::Restore).expect("could not send all keys");
-                    stream.write_packet(Packet::reset_keyboard()).expect("Error sending packet");
-                    stream.write_packet(Packet::reset_mouse()).expect("Error sending packet");
+pub struct Client {
+    receiver: Receiver<ClientEvent>,
+    hook_thread: Option<JoinHandle<()>>,
+    quitter: Quitter
+}
+
+impl Client {
+    pub fn start(hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<Self> {
+        let (tx, rx): (Sender<ClientEvent>, Receiver<ClientEvent>) = channel();
+        let blacklist = blacklist.clone();
+        let t = std::thread::spawn(move || {
+            let mut kb_state = KeyButtonState::new();
+            let mut captured = false;
+            let mut hotkey = HotKey::new(hotkey);
+            let mut pos: Option<(i32, i32)> = None;
+
+            let _hook = InputHook::new(|event|{
+                if let Some(triggered) = hotkey.triggered(&event) {
+                    if triggered {
+                        captured = !captured;
+                        if captured {
+                            kb_state.change_local_state(ChangeType::Wipe).expect("could not send all keys");
+                            tx.send(ClientEvent::Packet(Packet::SwitchDevice(Side::Remote))).expect("Error sending packet");
+                            tx.send(ClientEvent::Packet(kb_state.create_keyboard_packet())).expect("Error sending packet");
+                            tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, 0))).expect("Error sending packet");
+                        } else {
+                            kb_state.change_local_state(ChangeType::Restore).expect("could not send all keys");
+                            tx.send(ClientEvent::Packet(Packet::reset_mouse())).expect("Error sending packet");
+                            tx.send(ClientEvent::Packet(Packet::reset_keyboard())).expect("Error sending packet");
+                            tx.send(ClientEvent::Packet(Packet::SwitchDevice(Side::Local))).expect("Error sending packet");
+                        }
+                    }
+                    return false;
                 }
-            }
-            return false;
-        }
-        if let Some(event) = event.to_key_event() {
-            if blacklist.contains(&event.key){
-                return true;
-            }
-        }
-        if pos.is_none() {
-            if let InputEvent::MouseMoveEvent(px, py) = event {
-                pos = Some((px, py));
-                return true;
-            }
-        }
-        if kb_state.handle_event(&event) {
-            match event {
-                InputEvent::KeyboardKeyEvent(_, _, _) => if captured {
-                    stream.write_packet(kb_state.create_keyboard_packet()).expect("Error sending packet");
-                }
-                InputEvent::MouseButtonEvent(_, _) => if captured {
-                    stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, 0)).expect("Error sending packet");
-                }
-                InputEvent::MouseWheelEvent(dir) => if captured {
-                    match dir {
-                        ScrollDirection::Horizontal(am) => stream.write_packet(kb_state.create_mouse_packet(0, 0, 0, am as i8)).expect("Error sending packet"),
-                        ScrollDirection::Vertical(am) => stream.write_packet(kb_state.create_mouse_packet(0, 0, am as i8, 0)).expect("Error sending packet")
+                if let Some(event) = event.to_key_event() {
+                    if blacklist.contains(&event.key){
+                        return true;
                     }
                 }
-                InputEvent::MouseMoveEvent(px, py) => if captured {
-                    let (dx, dy) = match pos {
-                        None => (0, 0),
-                        Some((ox, oy)) => (px - ox, py - oy)
-                    };
-                    let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
-                    if dx != 0 || dy != 0 {
-                        stream.write_packet(kb_state.create_mouse_packet(dx, dy, 0, 0)).expect("Error sending packet");
+                if pos.is_none() {
+                    if let InputEvent::MouseMoveEvent(px, py) = event {
+                        pos = Some((px, py));
+                        return true;
                     }
-                } else {
-                    pos = Some((px, py));
+                }
+                if kb_state.handle_event(&event) {
+                    match event {
+                        InputEvent::KeyboardKeyEvent(_, _, _) => if captured {
+                            tx.send(ClientEvent::Packet(kb_state.create_keyboard_packet())).expect("Error sending packet");
+                        }
+                        InputEvent::MouseButtonEvent(_, _) => if captured {
+                            tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, 0))).expect("Error sending packet");
+                        }
+                        InputEvent::MouseWheelEvent(dir) => if captured {
+                            match dir {
+                                ScrollDirection::Horizontal(am) => tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, am as i8))).expect("Error sending packet"),
+                                ScrollDirection::Vertical(am) => tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, am as i8, 0))).expect("Error sending packet")
+                            }
+                        }
+                        InputEvent::MouseMoveEvent(px, py) => if captured {
+                            let (dx, dy) = match pos {
+                                None => (0, 0),
+                                Some((ox, oy)) => (px - ox, py - oy)
+                            };
+                            let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
+                            if dx != 0 || dy != 0 {
+                                tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(dx, dy, 0, 0))).expect("Error sending packet");
+                            }
+                        } else {
+                            pos = Some((px, py));
+                        }
+                    }
+                }
+                !captured
+            });
+            tx.send(ClientEvent::SuccessfullyRegistration(Quitter::from_current_thread())).unwrap();
+            yawi::run();
+        });
+        let quitter = match rx.recv_timeout(Duration::from_secs(1))? {
+            ClientEvent::SuccessfullyRegistration(quit) => Ok(quit),
+            _ => Err(anyhow::anyhow!("Unexpected value"))
+        }?;
+        Ok(Self {
+            receiver: rx,
+            hook_thread: Some(t),
+            quitter
+        })
+    }
+
+    pub fn try_recv(&self) -> Result<Packet, TryRecvError> {
+        loop  {
+            match self.receiver.try_recv()? {
+                ClientEvent::SuccessfullyRegistration(_) => continue,
+                ClientEvent::Packet(p) => return Ok(p)
+            }
+        }
+    }
+
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        self.quitter.quit();
+        if let Some(jh) = self.hook_thread.take() {
+            let _ = jh.join();
+        }
+    }
+}
+
+impl Evented for Client {
+    fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+        self.receiver.register(poll, token, interest, opts)
+    }
+
+    fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
+        self.receiver.reregister(poll, token, interest, opts)
+    }
+
+    fn deregister(&self, poll: &Poll) -> io::Result<()> {
+        self.receiver.deregister(poll)
+    }
+}
+
+trait ReceiveBlocking<T> {
+    fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>;
+}
+
+impl<T> ReceiveBlocking<T> for Receiver<T> {
+    fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError> {
+        let start = Instant::now();
+        loop {
+            match self.try_recv() {
+                Ok(v) => return Ok(v),
+                Err(err) => match err {
+                    TryRecvError::Empty => {
+                        if start.elapsed() >= timeout {
+                            return Err(RecvTimeoutError::Timeout)
+                        }
+                        std::thread::yield_now()
+                    }
+                    TryRecvError::Disconnected => return Err(RecvTimeoutError::Disconnected)
                 }
             }
         }
-        !captured
-    });
-
-    //{
-    //    let quitter = yawi::Quitter::from_current_thread();
-    //    let quit_signal = get_quit_signals();
-    //    std::thread::spawn(move || {
-    //        quit_signal.recv().unwrap();
-    //        quitter.quit();
-    //    });
-    //}
-
-    yawi::run();
-
-    Ok(())
+    }
 }
 
 struct KeyButtonState {

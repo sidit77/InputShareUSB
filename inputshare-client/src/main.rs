@@ -6,7 +6,7 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream};
 use std::borrow::{Borrow, Cow};
 use inputshare_common::{WriteExt, ReadExt};
 use std::io;
-use crate::client::{run_client, WritePacket, Packet};
+use crate::client::{run_client, WritePacket, Packet, Client};
 use std::io::{stdin, Write, Error, Read};
 use mio::{PollOpt, Ready, Poll, Token, Events};
 use mio_extras::channel::{channel, Receiver, Sender};
@@ -16,7 +16,7 @@ mod hid;
 mod config;
 mod client;
 
-const TICK: Token = Token(0);
+const CLIENT: Token = Token(0);
 const QUIT: Token = Token(1);
 const SERVER: Token = Token(2);
 
@@ -35,11 +35,11 @@ fn main() -> anyhow::Result<()>{
     println!("Successfully connected to server");
 
     let quit_signal = get_quit_signals();
-    let ticker = get_ticker();
+    let client = Client::start(cfg.hotkey, &cfg.backlist)?;
     let mut server = mio::net::TcpStream::from_stream(server)?;
 
     let poll = Poll::new()?;
-    poll.register(&ticker, TICK, Ready::readable(), PollOpt::edge())?;
+    poll.register(&client, CLIENT, Ready::readable(), PollOpt::edge())?;
     poll.register(&quit_signal, QUIT, Ready::readable(), PollOpt::edge())?;
     poll.register(&server, SERVER, Ready::readable(), PollOpt::edge())?;
 
@@ -49,9 +49,9 @@ fn main() -> anyhow::Result<()>{
 
         for event in events.iter() {
             match event.token() {
-                TICK => loop {
-                    match ticker.try_recv() {
-                        Ok(_) => server.write_packet(Packet::reset_mouse())?,
+                CLIENT => loop {
+                    match client.try_recv() {
+                        Ok(packet) => server.write_packet(packet)?,
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => return Err(anyhow::anyhow!("The client stopped working"))
                     }
