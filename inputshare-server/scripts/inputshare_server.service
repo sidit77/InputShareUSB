@@ -4,7 +4,7 @@ After=multi-user.target enable_hid.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/inputshare-server 12351 hardware
+ExecStart=/usr/bin/inputshare-server
 Restart=on-failure
 
 [Install]
