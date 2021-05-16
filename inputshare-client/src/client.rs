@@ -34,6 +34,11 @@ impl Client {
             let mut hotkey = HotKey::new(hotkey);
             let mut pos: Option<(i32, i32)> = None;
 
+            send_packet(Packet::SwitchDevice(match captured {
+                true => Side::Remote,
+                false => Side::Local
+            }));
+
             let hook = InputHook::new(|event|{
                 if let Some(triggered) = hotkey.triggered(&event) {
                     if triggered {
