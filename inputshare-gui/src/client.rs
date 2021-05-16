@@ -155,7 +155,7 @@ pub fn create_client<'a>(mut stream: TcpStream) -> InputHook<'a>{
             }
         }
     });
-    _hook
+    _hook.unwrap()
 }
 
 

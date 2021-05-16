@@ -72,7 +72,7 @@ impl DefaultPage {
             hook: Some(InputHook::new(|even|  {
                 println!("Test");
                 true
-            })),
+            }).unwrap()),
             ..Default::default()
         }
     }
