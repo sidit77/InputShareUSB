@@ -11,27 +11,21 @@ use mio_extras::channel::{Receiver, channel, Sender};
 use std::sync::mpsc::{TryRecvError, RecvTimeoutError};
 use std::time::{Duration, Instant};
 use mio::{Evented, Ready, PollOpt, Poll, Token};
-
-enum ClientEvent {
-    SuccessfullyRegistration(Quitter),
-    Packet(Packet)
-}
+use std::sync::mpsc;
 
 pub struct Client {
-    receiver: Receiver<ClientEvent>,
+    receiver: Receiver<Packet>,
     hook_thread: Option<JoinHandle<()>>,
     quitter: Quitter
 }
 
 impl Client {
     pub fn start(hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<Self> {
-        let (tx, rx): (Sender<ClientEvent>, Receiver<ClientEvent>) = channel();
+        let (ptx, prx): (Sender<Packet>, Receiver<Packet>) = channel();
+        let (ctx, crx): (mpsc::Sender<anyhow::Result<Quitter>>, mpsc::Receiver<anyhow::Result<Quitter>>) = mpsc::channel();
 
-        let send_packet = {
-            let tx2 = tx.clone();
-            move |packet| {
-                tx2.send(ClientEvent::Packet(packet)).expect("Could not send packet!");
-            }
+        let send_packet = move |packet| {
+            ptx.send(packet).expect("Could not send packet!");
         };
         let blacklist = blacklist.clone();
         let t = std::thread::spawn(move || {
@@ -101,30 +95,23 @@ impl Client {
             });
             match hook {
                 Ok(_) => {
-                    tx.send(ClientEvent::SuccessfullyRegistration(Quitter::from_current_thread())).unwrap();
+                    ctx.send(Ok(Quitter::from_current_thread())).unwrap();
                     yawi::run();
                 }
-                Err(err) => println!("{}", err)
+                Err(err) => ctx.send(Err(anyhow::Error::from(err))).unwrap()
             }
         });
-        let quitter = match rx.recv_timeout(Duration::from_secs(1))? {
-            ClientEvent::SuccessfullyRegistration(quit) => Ok(quit),
-            _ => Err(anyhow::anyhow!("Unexpected value"))
-        }?;
+        let quitter = crx.recv_timeout(Duration::from_secs(1))??;
+
         Ok(Self {
-            receiver: rx,
+            receiver: prx,
             hook_thread: Some(t),
             quitter
         })
     }
 
     pub fn try_recv(&self) -> Result<Packet, TryRecvError> {
-        loop  {
-            match self.receiver.try_recv()? {
-                ClientEvent::SuccessfullyRegistration(_) => continue,
-                ClientEvent::Packet(p) => return Ok(p)
-            }
-        }
+        self.receiver.try_recv()
     }
 
 }
