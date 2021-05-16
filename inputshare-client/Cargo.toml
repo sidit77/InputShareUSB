@@ -17,6 +17,7 @@ byteorder = "1.4"
 ctrlc = "3.1"
 mio = "0.6"
 mio-extras = "2.0"
+console = "0.14.1"
 yawi = { path = "../yawi", features = ["serde"] }
 inputshare-common = { path = "../inputshare-common" }
 

@@ -6,12 +6,13 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream};
 use std::borrow::{Borrow, Cow};
 use inputshare_common::{WriteExt, ReadExt};
 use std::io;
-use crate::client::{WritePacket, Packet, Client};
+use crate::client::{WritePacket, Packet, Client, Side};
 use std::io::{stdin, Read};
 use mio::{PollOpt, Ready, Poll, Token, Events};
 use mio_extras::channel::{channel, Receiver, Sender};
 use std::sync::mpsc::TryRecvError;
 use mio::tcp::Shutdown;
+use console::{Term, style};
 
 mod hid;
 mod config;
@@ -22,14 +23,17 @@ const QUIT: Token = Token(1);
 const SERVER: Token = Token(2);
 
 fn main() -> anyhow::Result<()>{
+    let term = Term::stdout();
+    term.set_title("Inputshare Client");
 
     println!("Starting client");
+
     let cfg = config::Config::load().unwrap();
 
-    println!("Resolving {}", cfg.merged_address());
+    println!("Resolving {}", style(cfg.merged_address()).cyan());
     let address = resolve_address(cfg.merged_address())?;
 
-    println!("Connecting to {}", address);
+    println!("Connecting to {}", style(address).cyan());
     let mut server = TcpStream::connect(&address)?;
     do_handshake(&mut server)?;
 
@@ -45,6 +49,8 @@ fn main() -> anyhow::Result<()>{
     poll.register(&quit_signal, QUIT, Ready::readable(), PollOpt::edge())?;
     poll.register(&server, SERVER, Ready::readable(), PollOpt::edge())?;
 
+    println!("Current side: ");
+    println!("Unknown");
     let mut events = Events::with_capacity(1024);
     loop {
         poll.poll(&mut events, None).unwrap();
@@ -55,7 +61,11 @@ fn main() -> anyhow::Result<()>{
                     match client.try_recv() {
                         Ok(packet) => {
                             if let Packet::SwitchDevice(side) = &packet {
-                                println!("Switching sides: {:?}", side)
+                                term.clear_last_lines(1)?;
+                                println!("{}", match side {
+                                    Side::Local =>  style("==This PC==").bold().blue(),
+                                    Side::Remote => style("=Remote PC=").bold().red(),
+                                })
                             }
                             server.write_packet(packet)?
                         },
@@ -122,9 +132,13 @@ fn get_quit_signals() -> Receiver<Quit>{
     {
         let tx_t = tx.clone();
         std::thread::spawn(move || {
+            let term = Term::stdout();
             let mut s = String::new();
             loop {
                 stdin().read_line(&mut s).expect("Cant read stdin!");
+                if !s.is_empty() {
+                    term.clear_last_lines(1).unwrap();
+                }
                 if s.trim().eq("stop") {
                     tx_t.send(Quit).unwrap()
                 }
