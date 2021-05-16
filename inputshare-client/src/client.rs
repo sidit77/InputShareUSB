@@ -40,7 +40,7 @@ impl Client {
             let mut hotkey = HotKey::new(hotkey);
             let mut pos: Option<(i32, i32)> = None;
 
-            let _hook = InputHook::new(|event|{
+            let hook = InputHook::new(|event|{
                 if let Some(triggered) = hotkey.triggered(&event) {
                     if triggered {
                         captured = !captured;
@@ -99,8 +99,13 @@ impl Client {
                 }
                 !captured
             });
-            tx.send(ClientEvent::SuccessfullyRegistration(Quitter::from_current_thread())).unwrap();
-            yawi::run();
+            match hook {
+                Ok(_) => {
+                    tx.send(ClientEvent::SuccessfullyRegistration(Quitter::from_current_thread())).unwrap();
+                    yawi::run();
+                }
+                Err(err) => println!("{}", err)
+            }
         });
         let quitter = match rx.recv_timeout(Duration::from_secs(1))? {
             ClientEvent::SuccessfullyRegistration(quit) => Ok(quit),
@@ -252,7 +257,7 @@ impl KeyButtonState {
         }
     }
 
-    fn change_local_state(&self, change: ChangeType)  -> anyhow::Result<()> {
+    fn change_local_state(&self, change: ChangeType)  -> yawi::Result<()> {
         let state = match change {
             ChangeType::Wipe => KeyState::Released,
             ChangeType::Restore => KeyState::Pressed

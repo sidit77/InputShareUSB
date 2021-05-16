@@ -9,6 +9,7 @@ use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
 use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
 use std::convert::TryInto;
+use crate::error::Error;
 
 static mut NATIVE_HOOK: Option<NativeHook> = None;
 
@@ -18,15 +19,23 @@ struct NativeHook {
 }
 
 impl NativeHook {
-    unsafe fn register() -> Self{
-        let handle = GetModuleHandleW(null());
-        let keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0);
-        let mouse    = SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), handle, 0);
+    unsafe fn register() -> crate::Result<Self>{
+        let handle = check(GetModuleHandleW(null()))?;
+        let keyboard = check(SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0))?;
+        let mouse    = check(SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), handle, 0))?;
         println!("Registered native hooks!");
-        Self {
+        Ok(Self {
             keyboard,
             mouse
-        }
+        })
+    }
+}
+
+fn check<T>(ptr: *mut T) -> crate::Result<*mut T>{
+    if ptr.is_null() {
+        Err(Error::last())
+    } else {
+        Ok(ptr)
     }
 }
 
@@ -48,7 +57,7 @@ pub struct InputHook<'a> {
 }
 
 impl<'a> InputHook<'a>{
-    pub fn new<T>(c: T) -> Self  where T: FnMut(InputEvent) -> bool + 'a{
+    pub fn new<T>(c: T) -> crate::Result<Self>  where T: FnMut(InputEvent) -> bool + 'a{
         let callback = Rc::new(RefCell::new(c));
         let result = Self {
             callback
@@ -58,10 +67,10 @@ impl<'a> InputHook<'a>{
             let x = Rc::downgrade(&result.callback);
             CALLBACKS.push(std::mem::transmute(x));
             if NATIVE_HOOK.is_none(){
-                NATIVE_HOOK = Some(NativeHook::register());
+                NATIVE_HOOK = Some(NativeHook::register()?);
             }
         }
-        result
+        Ok(result)
     }
 }
 

@@ -1,6 +1,7 @@
 use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, GetSystemMetrics};
 use std::mem;
 use crate::{KeyState, Input, VirtualKey, ScrollDirection};
+use crate::error::Error;
 
 const IGNORE: usize = 0x1234567;
 
@@ -137,7 +138,7 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
 /// [SendInput](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
 ///
 /// Return Ok if the number of send inputs match the number of supplied inputs
-pub fn send_inputs<'a>(inputs: &[Input]) -> anyhow::Result<()>{
+pub fn send_inputs<'a>(inputs: &[Input]) -> crate::Result<()>{
     let mut vec = Vec::new();
     for input in inputs {
         add_to_vec(&mut vec, input);
@@ -145,13 +146,13 @@ pub fn send_inputs<'a>(inputs: &[Input]) -> anyhow::Result<()>{
     let c = unsafe {winapi::um::winuser::SendInput(vec.len() as u32, vec.as_mut_ptr(), mem::size_of::<INPUT>() as i32)};
     match vec.len() == c as usize {
         true => Ok(()),
-        false => anyhow::bail!("Count not inject all inputs!")
+        false => Err(Error::last())
     }
 }
 
 /// Convenience function to send a single input
 ///
 /// See `send_inputs` for more info
-pub fn send_input(input: Input) -> anyhow::Result<()> {
+pub fn send_input(input: Input) -> crate::Result<()> {
     send_inputs(&[input])
 }
