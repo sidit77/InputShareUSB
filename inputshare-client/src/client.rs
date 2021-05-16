@@ -1,14 +1,14 @@
 use std::net::TcpStream;
 use yawi::{VirtualKey, InputHook, KeyState, InputEvent, Input, ScrollDirection, Quitter};
 use crate::hid::{HidScanCode, HidMouseButtons, HidModifierKeys, convert_win2hid};
-use std::io::{Write, stdin};
+use std::io::Write;
 use std::convert::TryFrom;
 use inputshare_common::PackageIds;
 use byteorder::{WriteBytesExt, LittleEndian};
 use std::io;
 use std::thread::JoinHandle;
 use mio_extras::channel::{Receiver, channel, Sender};
-use std::sync::mpsc::{TryRecvError, RecvError, RecvTimeoutError};
+use std::sync::mpsc::{TryRecvError, RecvTimeoutError};
 use std::time::{Duration, Instant};
 use mio::{Evented, Ready, PollOpt, Poll, Token};
 
@@ -26,6 +26,13 @@ pub struct Client {
 impl Client {
     pub fn start(hotkey: VirtualKey, blacklist: &Vec<VirtualKey>) -> anyhow::Result<Self> {
         let (tx, rx): (Sender<ClientEvent>, Receiver<ClientEvent>) = channel();
+
+        let send_packet = {
+            let tx2 = tx.clone();
+            move |packet| {
+                tx2.send(ClientEvent::Packet(packet)).expect("Could not send packet!");
+            }
+        };
         let blacklist = blacklist.clone();
         let t = std::thread::spawn(move || {
             let mut kb_state = KeyButtonState::new();
@@ -39,14 +46,14 @@ impl Client {
                         captured = !captured;
                         if captured {
                             kb_state.change_local_state(ChangeType::Wipe).expect("could not send all keys");
-                            tx.send(ClientEvent::Packet(Packet::SwitchDevice(Side::Remote))).expect("Error sending packet");
-                            tx.send(ClientEvent::Packet(kb_state.create_keyboard_packet())).expect("Error sending packet");
-                            tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, 0))).expect("Error sending packet");
+                            send_packet(Packet::SwitchDevice(Side::Remote));
+                            send_packet(kb_state.create_keyboard_packet());
+                            send_packet(kb_state.create_mouse_packet(0, 0, 0, 0));
                         } else {
                             kb_state.change_local_state(ChangeType::Restore).expect("could not send all keys");
-                            tx.send(ClientEvent::Packet(Packet::reset_mouse())).expect("Error sending packet");
-                            tx.send(ClientEvent::Packet(Packet::reset_keyboard())).expect("Error sending packet");
-                            tx.send(ClientEvent::Packet(Packet::SwitchDevice(Side::Local))).expect("Error sending packet");
+                            send_packet(Packet::reset_mouse());
+                            send_packet(Packet::reset_keyboard());
+                            send_packet(Packet::SwitchDevice(Side::Local));
                         }
                     }
                     return false;
@@ -65,15 +72,15 @@ impl Client {
                 if kb_state.handle_event(&event) {
                     match event {
                         InputEvent::KeyboardKeyEvent(_, _, _) => if captured {
-                            tx.send(ClientEvent::Packet(kb_state.create_keyboard_packet())).expect("Error sending packet");
+                            send_packet(kb_state.create_keyboard_packet());
                         }
                         InputEvent::MouseButtonEvent(_, _) => if captured {
-                            tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, 0))).expect("Error sending packet");
+                            send_packet(kb_state.create_mouse_packet(0, 0, 0, 0));
                         }
                         InputEvent::MouseWheelEvent(dir) => if captured {
                             match dir {
-                                ScrollDirection::Horizontal(am) => tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, 0, am as i8))).expect("Error sending packet"),
-                                ScrollDirection::Vertical(am) => tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(0, 0, am as i8, 0))).expect("Error sending packet")
+                                ScrollDirection::Horizontal(am) => send_packet(kb_state.create_mouse_packet(0, 0, 0, am as i8)),
+                                ScrollDirection::Vertical(am) => send_packet(kb_state.create_mouse_packet(0, 0, am as i8, 0))
                             }
                         }
                         InputEvent::MouseMoveEvent(px, py) => if captured {
@@ -83,7 +90,7 @@ impl Client {
                             };
                             let (dx, dy) = (i16::try_from(dx).unwrap(), i16::try_from(dy).unwrap());
                             if dx != 0 || dy != 0 {
-                                tx.send(ClientEvent::Packet(kb_state.create_mouse_packet(dx, dy, 0, 0))).expect("Error sending packet");
+                                send_packet(kb_state.create_mouse_packet(dx, dy, 0, 0));
                             }
                         } else {
                             pos = Some((px, py));

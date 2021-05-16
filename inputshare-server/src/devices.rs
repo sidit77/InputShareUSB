@@ -53,8 +53,8 @@ impl Devices {
                     true => Ok(())
                 }
             },
-            Packet::SwitchSide(side) => {
-                println!("Switching Side: {:?}", side);
+            Packet::SwitchSide(_) => {
+                //println!("Switching Side: {:?}", side);
                 Ok(())
             }
         }

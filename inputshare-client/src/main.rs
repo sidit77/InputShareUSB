@@ -6,11 +6,12 @@ use std::net::{ToSocketAddrs, SocketAddr, TcpStream};
 use std::borrow::{Borrow, Cow};
 use inputshare_common::{WriteExt, ReadExt};
 use std::io;
-use crate::client::{run_client, WritePacket, Packet, Client};
-use std::io::{stdin, Write, Error, Read};
+use crate::client::{WritePacket, Packet, Client};
+use std::io::{stdin, Read};
 use mio::{PollOpt, Ready, Poll, Token, Events};
 use mio_extras::channel::{channel, Receiver, Sender};
 use std::sync::mpsc::TryRecvError;
+use mio::tcp::Shutdown;
 
 mod hid;
 mod config;
@@ -37,6 +38,7 @@ fn main() -> anyhow::Result<()>{
     let quit_signal = get_quit_signals();
     let client = Client::start(cfg.hotkey, &cfg.backlist)?;
     let mut server = mio::net::TcpStream::from_stream(server)?;
+    //server.set_nodelay(true)?;
 
     let poll = Poll::new()?;
     poll.register(&client, CLIENT, Ready::readable(), PollOpt::edge())?;
@@ -51,13 +53,19 @@ fn main() -> anyhow::Result<()>{
             match event.token() {
                 CLIENT => loop {
                     match client.try_recv() {
-                        Ok(packet) => server.write_packet(packet)?,
+                        Ok(packet) => {
+                            if let Packet::SwitchDevice(side) = &packet {
+                                println!("Switching sides: {:?}", side)
+                            }
+                            server.write_packet(packet)?
+                        },
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => return Err(anyhow::anyhow!("The client stopped working"))
                     }
                 }
                 QUIT => {
                     println!("Quitting");
+                    server.shutdown(Shutdown::Both)?;
                     return Ok(())
                 },
                 SERVER => {
@@ -75,8 +83,6 @@ fn main() -> anyhow::Result<()>{
         }
     }
 
-
-    //run_client(&mut server, cfg.hotkey, &cfg.backlist)
 }
 
 fn resolve_address(address: &str) -> io::Result<SocketAddr> {
@@ -125,21 +131,6 @@ fn get_quit_signals() -> Receiver<Quit>{
             }
         });
     }
-
-    rx
-}
-
-struct Tick;
-
-fn get_ticker() -> Receiver<Tick>{
-    let (tx, rx): (Sender<Tick>, Receiver<Tick>) = channel();
-
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(Duration::from_millis(10000));
-            tx.send(Tick).unwrap();
-        }
-    });
 
     rx
 }
