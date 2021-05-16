@@ -3,7 +3,7 @@ mod devices;
 
 use std::io::{Read, Error, ErrorKind};
 use std::time::Duration;
-use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr, Ipv4Addr};
+use std::net::{TcpListener, TcpStream, SocketAddr, IpAddr, Ipv4Addr};
 use std::thread;
 use std::sync::{Mutex, TryLockError, Arc};
 use inputshare_common::{PackageIds, ReadExt, WriteExt};
@@ -50,11 +50,15 @@ fn run_server(port: u16, backend_type: BackendType) -> std::io::Result<()>{
     }
 }
 
-
+#[derive(Debug, Copy, Clone)]
+pub enum Side {
+    Local,
+    Remote
+}
 
 #[derive(Debug)]
 pub enum Packet<'a> {
-    Keyboard(&'a[u8]), Mouse(&'a[u8])
+    Keyboard(&'a[u8]), Mouse(&'a[u8]), SwitchSide(Side)
 }
 
 trait ReadPacket: Read {
@@ -71,19 +75,22 @@ trait ReadPacket: Read {
                 self.read_exact(msg)?;
                 Ok(Packet::Mouse(msg))
             }
+            PackageIds::SWITCH => {
+                let msg = &mut buf[0..1];
+                self.read_exact(msg)?;
+                let side = match msg[0] {
+                    u8::MIN => Ok(Side::Local),
+                    u8::MAX => Ok(Side::Remote),
+                    _ => Err(Error::new(ErrorKind::InvalidData, "Unknown side!"))
+                }?;
+                Ok(Packet::SwitchSide(side))
+            }
             _ => Err(Error::new(ErrorKind::InvalidData, "Unknown package identifier!"))
         }
     }
 }
 
 impl ReadPacket for TcpStream {}
-
-
-
-fn disconnect(stream: &mut TcpStream, error: anyhow::Error) -> std::io::Result<()>{
-
-    Ok(())
-}
 
 fn handle_connection(stream: &mut TcpStream, devices: &Mutex<Devices>) -> anyhow::Result<()>{
     let mut data = [0 as u8; 50];

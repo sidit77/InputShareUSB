@@ -9,6 +9,7 @@ pub struct PackageIds {}
 impl PackageIds {
     pub const KEYBOARD: u8 = 0x1;
     pub const MOUSE: u8 = 0x2;
+    pub const SWITCH: u8 = 0x3;
 }
 
 

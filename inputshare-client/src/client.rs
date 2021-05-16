@@ -218,10 +218,17 @@ impl HotKey {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Side {
+    Local,
+    Remote
+}
+
 #[derive(Debug)]
 pub enum Packet {
     Keyboard(HidModifierKeys, [Option<HidScanCode>; 6]),
-    Mouse(HidMouseButtons, i16, i16, i8, i8)
+    Mouse(HidMouseButtons, i16, i16, i8, i8),
+    SwitchDevice(Side)
 }
 
 impl Packet {
@@ -255,6 +262,14 @@ pub trait WritePacket: Write {
                 self.write_i16::<LittleEndian>(dy)?;
                 self.write_i8(dv)?;
                 self.write_i8(dh)?;
+                self.flush()
+            }
+            Packet::SwitchDevice(side) => {
+                self.write_u8(PackageIds::SWITCH)?;
+                self.write_u8(match  side {
+                    Side::Local => u8::MIN,
+                    Side::Remote => u8::MAX
+                })?;
                 self.flush()
             }
         }

@@ -26,28 +26,22 @@ fn main() -> anyhow::Result<()>{
     let cfg = config::Config::load().unwrap();
 
     println!("Resolving {}", cfg.merged_address());
-
-
-
     let address = resolve_address(cfg.merged_address())?;
 
     println!("Connecting to {}", address);
-
     let mut server = TcpStream::connect(&address)?;
-
-
     do_handshake(&mut server)?;
 
     println!("Successfully connected to server");
 
-    let mut quit_signal = get_quit_signals();
-    let mut ticker = get_ticker();
+    let quit_signal = get_quit_signals();
+    let ticker = get_ticker();
     let mut server = mio::net::TcpStream::from_stream(server)?;
 
     let poll = Poll::new()?;
     poll.register(&ticker, TICK, Ready::readable(), PollOpt::edge())?;
     poll.register(&quit_signal, QUIT, Ready::readable(), PollOpt::edge())?;
-    poll.register(&server, SERVER, Ready::readable(), PollOpt::level())?;
+    poll.register(&server, SERVER, Ready::readable(), PollOpt::edge())?;
 
     let mut events = Events::with_capacity(1024);
     loop {

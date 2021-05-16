@@ -52,6 +52,10 @@ impl Devices {
                     false => Ok(println!("Mouse: {:?}", msg)),
                     true => Ok(())
                 }
+            },
+            Packet::SwitchSide(side) => {
+                println!("Switching Side: {:?}", side);
+                Ok(())
             }
         }
     }
