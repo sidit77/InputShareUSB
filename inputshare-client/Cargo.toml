@@ -8,18 +8,18 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-confy = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-pico-args = "0.4"
+# confy = "0.4"
+# serde = { version = "1.0", features = ["derive"] }
+# pico-args = "0.4"
 anyhow = "1.0"
-bitflags = "1.2"
-byteorder = "1.4"
-ctrlc = "3.1"
-mio = "0.6"
-mio-extras = "2.0"
-console = "0.14.1"
-yawi = { path = "../yawi", features = ["serde"] }
-inputshare-common = { path = "../inputshare-common" }
+# bitflags = "1.2"
+# byteorder = "1.4"
+# ctrlc = "3.1"
+# mio = "0.6"
+# mio-extras = "2.0"
+# console = "0.14.1"
+# yawi = { path = "../yawi", features = ["serde"] }
+# inputshare-common = { path = "../inputshare-common" }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
