@@ -10,4 +10,5 @@ edition = "2018"
 anyhow = "1.0"
 # pico-args = "0.4.1"
 # inputshare-common = { path = "../inputshare-common" }
-mio = {version = "0.8.0", features = ["os-poll", "net"]}
+mio = {version = "0.7", features = ["os-poll", "net"]}
+mio-timerfd = "0.2"

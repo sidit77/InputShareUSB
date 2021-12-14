@@ -32,6 +32,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "mio",
+ "mio-timerfd",
 ]
 
 [[package]]
@@ -51,15 +52,25 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.0"
+version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba272f85fa0b41fc91872be579b3bbe0f56b792aa361a380eb669469f68dafb2"
+checksum = "8067b404fe97c70829f082dec8bcf4f71225d7eaea1d8645349cb76fa06205cc"
 dependencies = [
  "libc",
  "log",
  "miow",
  "ntapi",
  "winapi",
+]
+
+[[package]]
+name = "mio-timerfd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61840339b339e86a6f728531091b7626d16da3256037152ac92c66b8801c365c"
+dependencies = [
+ "libc",
+ "mio",
 ]
 
 [[package]]
