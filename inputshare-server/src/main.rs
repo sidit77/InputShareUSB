@@ -27,7 +27,6 @@ fn main() -> Result<()>{
 
     loop {
         poll.poll(&mut events, None)?;
-        println!("Got events");
         for event in events.iter() {
             match event.token() {
                 SERVER => {
@@ -42,7 +41,7 @@ fn main() -> Result<()>{
                 },
                 HEARTBEAT => {
                     println!("Tick!");
-                    timer.set_timeout(&Duration::from_millis(500));
+                    timer.set_timeout(&Duration::from_millis(1000))?;
                 }
                 _ => {}
             }
