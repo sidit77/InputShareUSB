@@ -20,7 +20,8 @@ anyhow = "1.0"
 # console = "0.14.1"
 # yawi = { path = "../yawi", features = ["serde"] }
 # inputshare-common = { path = "../inputshare-common" }
-mio = {version = "0.8", features=["os-poll", "net"]}
+winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef", "basetsd", "processthreadsapi", "errhandlingapi", "winsock2", "wincon"] }
+ctrlc = "3.2"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
