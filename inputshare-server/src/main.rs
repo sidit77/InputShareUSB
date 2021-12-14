@@ -5,7 +5,6 @@ use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
-use mio_timerfd::{ClockId, TimerFd};
 
 fn main() -> Result<()>{
     println!("Hello World!");
@@ -20,33 +19,14 @@ fn main() -> Result<()>{
 
     let mut signals = Signals::new(SignalSet::all())?;
 
-    let mut timer = TimerFd::new(ClockId::Monotonic)?;
-    timer.set_timeout(&Duration::from_secs(1))?;
-
     const SERVER: Token = Token(0);
-    const HEARTBEAT: Token = Token(1);
-    const SIGNAL: Token = Token(2);
+    const SIGNAL: Token = Token(1);
     poll.registry().register(&mut socket, SERVER, Interest::READABLE)?;
-    poll.registry().register(&mut timer, HEARTBEAT, Interest::READABLE)?;
     poll.registry().register(&mut signals, SIGNAL, Interest::READABLE)?;
     'outer: loop {
-        poll.poll(&mut events, None)?;
+        poll.poll(&mut events, Some(Duration::from_secs(1)))?;
         for event in events.iter() {
             match event.token() {
-                SERVER => {
-                    let mut buffer = [0u8; 1500];
-                    loop {
-                        match socket.recv_from(&mut buffer) {
-                            Ok((size, src)) => println!("Got {:?} from {}", &buffer[..size], src),
-                            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
-                            Err(e) => Err(e)?
-                        }
-                    }
-                },
-                HEARTBEAT => {
-                    println!("Tick!");
-                    timer.set_timeout(&Duration::from_millis(1000))?;
-                },
                 SIGNAL => loop {
                     match signals.receive()? {
                         Some(Signal::Interrupt) => break 'outer,
@@ -59,6 +39,15 @@ fn main() -> Result<()>{
                 _ => {}
             }
         }
+        let mut buffer = [0u8; 1500];
+        loop {
+            match socket.recv_from(&mut buffer) {
+                Ok((size, src)) => println!("Got {:?} from {}", &buffer[..size], src),
+                Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) => Err(e)?
+            }
+        }
+        println!("Tick!");
     }
 
     println!("Shutting down");

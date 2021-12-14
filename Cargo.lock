@@ -19,6 +19,7 @@ name = "inputshare-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mio",
  "winres",
 ]
 
@@ -33,7 +34,6 @@ dependencies = [
  "anyhow",
  "mio",
  "mio-signals",
- "mio-timerfd",
 ]
 
 [[package]]
@@ -72,15 +72,6 @@ checksum = "21e9524e26c8749824640a1282b68a695b21d55862efa6d465b5f71107c93368"
 dependencies = [
  "libc",
  "log",
- "mio",
-]
-
-[[package]]
-name = "mio-timerfd"
-version = "0.2.0"
-source = "git+https://github.com/sidit77/mio-timerfd.git#cb183c64825dd6def631c081817642606ea0c3ad"
-dependencies = [
- "libc",
  "mio",
 ]
 
