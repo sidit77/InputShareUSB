@@ -32,6 +32,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "mio",
+ "mio-signals",
  "mio-timerfd",
 ]
 
@@ -61,6 +62,17 @@ dependencies = [
  "miow",
  "ntapi",
  "winapi",
+]
+
+[[package]]
+name = "mio-signals"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21e9524e26c8749824640a1282b68a695b21d55862efa6d465b5f71107c93368"
+dependencies = [
+ "libc",
+ "log",
+ "mio",
 ]
 
 [[package]]

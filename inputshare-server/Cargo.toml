@@ -12,3 +12,4 @@ anyhow = "1.0"
 # inputshare-common = { path = "../inputshare-common" }
 mio = {version = "0.8", features = ["os-poll", "net"]}
 mio-timerfd = { git = "https://github.com/sidit77/mio-timerfd.git" }
+mio-signals = "0.2.0"
