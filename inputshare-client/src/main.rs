@@ -1,5 +1,6 @@
 mod error;
 mod enums;
+mod winsock;
 
 use std::{mem, ptr};
 use std::convert::TryInto;
@@ -8,7 +9,6 @@ use std::io::ErrorKind;
 use std::iter::once;
 use std::net::UdpSocket;
 use std::os::raw;
-use std::os::windows::io::AsRawSocket;
 use std::os::windows::prelude::OsStrExt;
 use std::ptr::{null, null_mut};
 use anyhow::Result;
@@ -16,14 +16,12 @@ use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM};
 use winapi::shared::windef::{HHOOK, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::um::wincon::GetConsoleWindow;
-use winapi::um::winsock2::{FD_READ, SOCKET, WSAAsyncSelect, WSAGetLastError};
-use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CW_USEDEFAULT, DefWindowProcW, DispatchMessageW, GetActiveWindow, GetMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, PostMessageW, PostThreadMessageW, RegisterClassW, SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW, WS_EX_LEFT, WS_OVERLAPPEDWINDOW, WS_VISIBLE};
+use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, PostMessageW, PostThreadMessageW, RegisterClassW, SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW};
 use crate::enums::{InputEvent, KeyState, VirtualKey, WindowsScanCode};
+use crate::winsock::{NetworkEvents, WinSockExt};
 
 
 fn main() -> Result<()>{
-
     {
         let thread_id = unsafe {GetCurrentThreadId()};
         ctrlc::set_handler(move || {
@@ -44,10 +42,7 @@ fn main() -> Result<()>{
 
 
     let socket = UdpSocket::bind("127.0.0.1:12345")?;
-    unsafe {
-       let error =  WSAAsyncSelect(socket.as_raw_socket() as SOCKET, handle, WM_USER + 1, FD_READ);
-        println!("{}, {}", error, WSAGetLastError());
-    }
+    socket.async_select(handle, WM_USER + 1, NetworkEvents::Read)?;
 
 
     unsafe {
