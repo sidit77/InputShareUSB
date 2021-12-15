@@ -10,12 +10,15 @@ use std::net::UdpSocket;
 use std::os::raw;
 use std::os::windows::prelude::OsStrExt;
 use std::ptr::{null, null_mut};
+use std::time::Duration;
 use anyhow::Result;
-use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM};
+use winapi::shared::minwindef::{FALSE, LPARAM, LRESULT, UINT, WPARAM};
 use winapi::shared::windef::{HHOOK, HWND};
+use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, PostMessageW, PostThreadMessageW, RegisterClassW, SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW};
+use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0, WAIT_FAILED};
+use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, PostMessageW, PostThreadMessageW, QS_ALLINPUT, RegisterClassW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW};
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use crate::enums::{InputEvent, KeyState, VirtualKey, WindowsScanCode};
 
@@ -35,35 +38,42 @@ fn main() -> Result<()>{
     }
 
     let handle = create_window("Dummy Window");//window.handle.hwnd().unwrap();//unsafe{GetConsoleWindow()};
-    let timer = unsafe {SetTimer(handle, 1, 1000, None) };
-    println!("{:?} {:?}", timer, handle);
+    //let timer = unsafe {SetTimer(handle, 1, 1000, None) };
+    //println!("{:?} {:?}", timer, handle);
 
-
+    const SOCKET: u32 = WM_USER + 1;
 
     let socket = UdpSocket::bind("127.0.0.1:12345")?;
-    socket.notify(handle, WM_USER + 1, NetworkEvents::Read)?;
+    socket.notify(handle, SOCKET, NetworkEvents::Read)?;
 
 
-    unsafe {
-        let mut msg: MSG = mem::zeroed();
-        while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) != 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-            println!("Test");
-            if msg.message == WM_USER + 1 {
-                println!("FINALLY");
-                let mut buf = [0u8; 1000];
-                loop {
-                    match socket.recv_from(&mut buf) {
-                        Ok((size, src)) => println!("Got {:?} from {}", &buf[..size], src),
-                        Err(e) if e.kind() == ErrorKind::WouldBlock => break,
-                        Err(e) => Err(e)?
+    'outer: loop {
+        wait_message_timeout(Some(Duration::from_secs(1)))?;
+        while let Some(msg) = get_message() {
+            unsafe {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            match msg.message {
+                WM_QUIT => break 'outer,
+                SOCKET => {
+                    println!("FINALLY");
+                    let mut buf = [0u8; 1000];
+                    loop {
+                        match socket.recv_from(&mut buf) {
+                            Ok((size, src)) => println!("Got {:?} from {}", &buf[..size], src),
+                            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                            Err(e) => Err(e)?
+                        }
+
                     }
-
                 }
+                _ => {}
             }
         }
+        println!("Tick");
     }
+
 //
     println!("Shutdown");
     unsafe {
@@ -72,27 +82,32 @@ fn main() -> Result<()>{
         }
     }
 
-    /*
-
-    'outer: loop {
-        unsafe {
-            let mut msg: MSG = mem::zeroed();
-            while PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
-                if msg.message == WM_QUIT {
-                    break 'outer;
-                }
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
-        println!("Test");
-        std::thread::sleep(Duration::from_millis(1000));
-    }
-
-     */
-
-
     Ok(())
+}
+
+fn wait_message_timeout(timeout: Option<Duration>) -> std::io::Result<bool> {
+    let timeout = match timeout {
+        None => INFINITE,
+        Some(duration) => duration.as_millis().try_into().expect("timout to large")
+    };
+    unsafe {
+        match MsgWaitForMultipleObjects(0, null(), FALSE, timeout, QS_ALLINPUT) {
+            WAIT_OBJECT_0 => Ok(true),
+            WAIT_TIMEOUT => Ok(false),
+            WAIT_FAILED => Err(std::io::Error::last_os_error()),
+            _ => panic!("invalid return type")
+        }
+    }
+}
+
+fn get_message() -> Option<MSG> {
+    unsafe {
+        let mut msg: MSG = mem::zeroed();
+        match PeekMessageW(&mut msg, null_mut(), 0, 0, PM_REMOVE) {
+            FALSE => None,
+            _ => Some(msg)
+        }
+    }
 }
 
 fn win32_string( value: &str ) -> Vec<u16> {
