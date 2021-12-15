@@ -51,6 +51,7 @@ dependencies = [
  "winapi",
  "winres",
  "winsock2_extensions",
+ "yawi",
 ]
 
 [[package]]
