@@ -29,7 +29,12 @@ mod flags {
 pub use flags::NetworkEvents;
 
 pub trait WinSockExt : AsRawSocket {
-    fn async_select(&self, window: HWND, msg: u32, events: NetworkEvents) -> Result<()> {
+
+
+    /// Modifies the socket to send `msg` to the event queue of `window` when one of the `events` occurs.
+    /// This methods automatically sets the socket to non-blocking mode.
+    /// This method internally uses [WSAAsyncSelect](https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-wsaasyncselect).
+    fn notify(&self, window: HWND, msg: u32, events: NetworkEvents) -> Result<()> {
         let socket = SOCKET::try_from(self.as_raw_socket()).unwrap();
         unsafe {
             match WSAAsyncSelect(socket, window, msg, events.bits()) {

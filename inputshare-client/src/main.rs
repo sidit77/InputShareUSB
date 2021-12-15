@@ -41,7 +41,7 @@ fn main() -> Result<()>{
 
 
     let socket = UdpSocket::bind("127.0.0.1:12345")?;
-    socket.async_select(handle, WM_USER + 1, NetworkEvents::Read)?;
+    socket.notify(handle, WM_USER + 1, NetworkEvents::Read)?;
 
 
     unsafe {
