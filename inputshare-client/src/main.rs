@@ -1,6 +1,5 @@
 mod error;
 mod enums;
-mod winsock;
 
 use std::{mem, ptr};
 use std::convert::TryInto;
@@ -17,8 +16,8 @@ use winapi::shared::windef::{HHOOK, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, PostMessageW, PostThreadMessageW, RegisterClassW, SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW};
+use winsock2_extensions::{NetworkEvents, WinSockExt};
 use crate::enums::{InputEvent, KeyState, VirtualKey, WindowsScanCode};
-use crate::winsock::{NetworkEvents, WinSockExt};
 
 
 fn main() -> Result<()>{

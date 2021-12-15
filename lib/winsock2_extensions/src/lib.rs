@@ -35,7 +35,7 @@ pub trait WinSockExt : AsRawSocket {
             match WSAAsyncSelect(socket, window, msg, events.bits()) {
                 0 => Ok(()),
                 SOCKET_ERROR => Err(Error::from_raw_os_error(WSAGetLastError())),
-                _ => unreachable!()
+                _ => panic!("Invalid return code")
             }
         }
     }
