@@ -23,6 +23,7 @@ anyhow = "1.0"
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef", "basetsd", "processthreadsapi", "errhandlingapi", "winsock2", "wincon"] }
 ctrlc = "3.2"
 winsock2_extensions = { path = "../lib/winsock2_extensions" }
+yawi = {path = "../lib/yawi"}
 
 
 [target.'cfg(windows)'.build-dependencies]

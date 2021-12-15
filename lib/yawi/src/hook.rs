@@ -1,37 +1,46 @@
-use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT};
+use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT, LLKHF_INJECTED, LLMHF_INJECTED};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::shared::windef::HHOOK;
 use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT, UINT};
 use std::os::raw;
 use std::ptr::{null};
-use std::rc::{Rc, Weak};
-use std::ops::{Deref, DerefMut};
-use std::cell::RefCell;
-use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
+use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent, Error};
 use std::convert::TryInto;
-use crate::error::Error;
-
-static mut NATIVE_HOOK: Option<NativeHook> = None;
+use std::marker::PhantomData;
+use crate::Result;
 
 struct NativeHook {
-    keyboard: HHOOK,
-    mouse: HHOOK
+    keyboard: Option<HHOOK>,
+    mouse: Option<HHOOK>,
+    callback: Box<dyn FnMut(InputEvent) -> bool>,
+    ignore_injected: bool
 }
 
 impl NativeHook {
-    unsafe fn register() -> crate::Result<Self>{
+    unsafe fn register(keyboard: bool, mouse: bool, ignore_injected: bool, callback: Box<dyn FnMut(InputEvent) -> bool>) -> Result<Self>{
         let handle = check(GetModuleHandleW(null()))?;
-        let keyboard = check(SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0))?;
-        let mouse    = check(SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), handle, 0))?;
+
+        let keyboard = if keyboard {
+            Some(check(SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0))?)
+        } else {
+            None
+        };
+        let mouse    = if mouse {
+            Some(check(SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), handle, 0))?)
+        } else {
+            None
+        };
         println!("Registered native hooks!");
         Ok(Self {
             keyboard,
-            mouse
+            mouse,
+            callback,
+            ignore_injected
         })
     }
 }
 
-fn check<T>(ptr: *mut T) -> crate::Result<*mut T>{
+fn check<T>(ptr: *mut T) -> Result<*mut T>{
     if ptr.is_null() {
         Err(Error::last())
     } else {
@@ -42,58 +51,88 @@ fn check<T>(ptr: *mut T) -> crate::Result<*mut T>{
 impl Drop for NativeHook {
     fn drop(&mut self) {
         unsafe {
-            UnhookWindowsHookEx(self.keyboard);
-            UnhookWindowsHookEx(self.mouse);
+            if let Some(hook) = self.keyboard {
+                UnhookWindowsHookEx(hook);
+            }
+            if let Some(hook) = self.mouse {
+                UnhookWindowsHookEx(hook);
+            }
         }
         println!("Unregistered native hooks!");
     }
 }
 
+static mut NATIVE_HOOK: Option<NativeHook> = None;
 
-static mut CALLBACKS: Vec<Weak<RefCell<dyn FnMut(InputEvent) -> bool>>> = Vec::new();
+#[derive(Debug, Copy, Clone)]
+pub enum HookType {
+    Keyboard,
+    Mouse,
+    KeyboardMouse
+}
 
-pub struct InputHook<'a> {
-    pub callback: Rc<RefCell<dyn FnMut(InputEvent) -> bool + 'a>>,
+impl HookType {
+    fn is_mouse(self) -> bool {
+        match self {
+            HookType::Keyboard => false,
+            HookType::Mouse => true,
+            HookType::KeyboardMouse => true
+        }
+    }
+    fn is_keyboard(self) -> bool {
+        match self {
+            HookType::Keyboard => true,
+            HookType::Mouse => false,
+            HookType::KeyboardMouse => true
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct InputHook<'a>{
+    inner: PhantomData<&'a u8>
 }
 
 impl<'a> InputHook<'a>{
-    pub fn new<T>(c: T) -> crate::Result<Self>  where T: FnMut(InputEvent) -> bool + 'a{
-        let callback = Rc::new(RefCell::new(c));
-        let result = Self {
-            callback
-        };
+    pub fn new<T>(callback: T, ignore_injected: bool, hook_type: HookType) -> Result<Self>  where T: FnMut(InputEvent) -> bool + 'a {
 
         unsafe {
-            let x = Rc::downgrade(&result.callback);
-            CALLBACKS.push(std::mem::transmute(x));
-            if NATIVE_HOOK.is_none(){
-                NATIVE_HOOK = Some(NativeHook::register()?);
+
+            match NATIVE_HOOK {
+                None => {
+                    let callback: Box<dyn FnMut(InputEvent) -> bool + 'a> = Box::new(callback);
+                    NATIVE_HOOK = Some(NativeHook::register(
+                        hook_type.is_keyboard(),
+                        hook_type.is_mouse(),
+                        ignore_injected,
+                        std::mem::transmute(callback))?);
+                    Ok(Self::default())
+                },
+                Some(_) => Err(Error::SUCCESS)
             }
         }
-        Ok(result)
+    }
+
+    pub fn remove(self) {
+        std::mem::drop(self)
     }
 }
 
 impl<'a> Drop for InputHook<'a> {
     fn drop(&mut self) {
         unsafe {
-            CALLBACKS.retain(|x| !matches!(x.upgrade(), None));
-            if CALLBACKS.len() <= 1 {
-                NATIVE_HOOK = None;
-            }
+            NATIVE_HOOK = None
         }
     }
 }
 
-const IGNORE: usize = 0x1234567;
-
 unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    CALLBACKS.retain(|x| !matches!(x.upgrade(), None));
+    let nhook = NATIVE_HOOK.as_mut().unwrap();
 
     if code >= 0 {
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
 
-        if key_struct.dwExtraInfo != IGNORE {
+        if !nhook.ignore_injected || key_struct.flags & LLKHF_INJECTED == 0 {
 
             let event = match parse_virtual_key(&key_struct) {
                 Some(key) => match parse_key_state(wparam) {
@@ -104,7 +143,7 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
             };
 
             if let Some(event) = event {
-                if !for_all(event) {
+                if !nhook.callback.as_mut()(event) {
                     return 1;
                 }
             }
@@ -112,16 +151,16 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
         }
 
     }
-    CallNextHookEx(NATIVE_HOOK.as_ref().unwrap().keyboard, code, wparam, lparam)
+    CallNextHookEx(nhook.keyboard.unwrap(), code, wparam, lparam)
 }
 
 unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    CALLBACKS.retain(|x| !matches!(x.upgrade(), None));
+    let nhook = NATIVE_HOOK.as_mut().unwrap();
 
     if code >= 0 {
         let key_struct = *(lparam as *const MSLLHOOKSTRUCT);
 
-        if key_struct.dwExtraInfo != IGNORE {
+        if !nhook.ignore_injected || key_struct.flags & LLMHF_INJECTED == 0 {
             let event = match wparam as u32{
                 winapi::um::winuser::WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
                 winapi::um::winuser::WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),
@@ -140,7 +179,7 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
             };
 
             if let Some(event) = event {
-                if !for_all(event) {
+                if !nhook.callback.as_mut()(event) {
                     return 1;
                 }
             }
@@ -149,17 +188,7 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
 
     }
 
-    CallNextHookEx(NATIVE_HOOK.as_ref().unwrap().mouse, code, wparam, lparam)
-}
-
-unsafe fn for_all(event: InputEvent) -> bool {
-    CALLBACKS
-        .iter_mut()
-        .map(|x| match x.upgrade() {
-            None => true,
-            Some(y) => (y.deref().borrow_mut().deref_mut())(event.clone())
-        })
-        .fold(true, |a, b| a && b)
+    CallNextHookEx(nhook.mouse.unwrap(), code, wparam, lparam)
 }
 
 fn parse_wheel_delta(key_struct: &MSLLHOOKSTRUCT) -> f32{

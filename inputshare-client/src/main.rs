@@ -1,22 +1,24 @@
-use std::{mem, ptr};
+use std::{mem};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::iter::once;
 use std::net::UdpSocket;
-use std::os::raw;
 use std::os::windows::prelude::OsStrExt;
 use std::ptr::{null, null_mut};
 use std::time::Duration;
 use anyhow::Result;
-use winapi::shared::minwindef::{FALSE, LPARAM, LRESULT, UINT, WPARAM};
-use winapi::shared::windef::{HHOOK, HWND};
+use winapi::shared::minwindef::{FALSE};
+use winapi::shared::windef::{HWND};
 use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0, WAIT_FAILED};
-use winapi::um::winuser::{CallNextHookEx, CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, HWND_MESSAGE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MapVirtualKeyW, MAPVK_VK_TO_VSC_EX, MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, PostMessageW, PostThreadMessageW, QS_ALLINPUT, RegisterClassW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, VK_NUMLOCK, VK_PAUSE, VK_SCROLL, VK_SNAPSHOT, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WNDCLASSW};
+use winapi::um::winuser::{CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, HWND_MESSAGE, MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, PostThreadMessageW, QS_ALLINPUT, RegisterClassW, TranslateMessage, WM_QUIT, WM_USER, WNDCLASSW};
 use winsock2_extensions::{NetworkEvents, WinSockExt};
+use yawi::{HookType, InputHook};
 
 fn main() -> Result<()>{
     {
@@ -26,11 +28,12 @@ fn main() -> Result<()>{
         })?;
     }
 
-    unsafe {
-        let handle = check(GetModuleHandleW(null()))?;
-        let keyboard = check(SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), handle, 0))?;
-        HOOK = Some(keyboard)
-    }
+    let mut input_events = RefCell::new(VecDeque::new());
+
+    let hook = InputHook::new(|event|{
+            input_events.borrow_mut().push_back(event);
+            true
+        }, true, HookType::Keyboard)?;
 
     let handle = create_window("Dummy Window");//window.handle.hwnd().unwrap();//unsafe{GetConsoleWindow()};
     //let timer = unsafe {SetTimer(handle, 1, 1000, None) };
@@ -43,7 +46,7 @@ fn main() -> Result<()>{
 
 
     'outer: loop {
-        wait_message_timeout(Some(Duration::from_secs(1)))?;
+        wait_message_timeout(None)?;
         while let Some(msg) = get_message() {
             unsafe {
                 TranslateMessage(&msg);
@@ -66,16 +69,16 @@ fn main() -> Result<()>{
                 _ => {}
             }
         }
+        while let Some(event) = input_events.borrow_mut().pop_front() {
+            println!("{:?}", event);
+        }
         println!("Tick");
     }
 
 //
     println!("Shutdown");
-    unsafe {
-        if let Some(hook) = HOOK{
-            UnhookWindowsHookEx(hook);
-        }
-    }
+
+    hook.remove();
 
     Ok(())
 }
