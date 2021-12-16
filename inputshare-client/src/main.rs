@@ -1,5 +1,6 @@
 mod sender;
 mod windows;
+mod conversions;
 
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind};
@@ -12,7 +13,8 @@ use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winuser::{DispatchMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
-use yawi::{HookType, InputEvent, InputHook, KeyEvent, KeyState, VirtualKey};
+use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
+use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hsc};
 use crate::sender::InputSender;
 use crate::windows::{create_window, get_message, wait_message_timeout};
 
@@ -65,13 +67,34 @@ fn main() -> Result<()>{
                         match event {
                             InputEvent::MouseMoveEvent(x, y) => {
                                 if let Some((ox, oy)) = old_mouse_pos {
-                                    sender.move_mouse(x - ox, y - oy);
+                                    sender.move_mouse((x - ox) as i64, (y - oy) as i64);
                                 }
                                 old_mouse_pos = Some((x,y))
                             }
-                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => {}
-                            InputEvent::MouseButtonEvent(mb, ks) => {}
-                            InputEvent::MouseWheelEvent(sd) => {}
+                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match vk_to_mod(vk) {
+                                Some(modifier) => match ks {
+                                    KeyState::Pressed => sender.press_modifier(modifier),
+                                    KeyState::Released => sender.release_modifier(modifier)
+                                }
+                                None => match wsc_to_hsc(sc) {
+                                    Some(key) => match ks {
+                                        KeyState::Pressed => sender.press_key(key),
+                                        KeyState::Released => sender.release_key(key)
+                                    },
+                                    None => println!("Unknown key: {}", vk)
+                                }
+                            }
+                            InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
+                                Some(button) => match ks {
+                                    KeyState::Pressed => sender.press_mouse_button(button),
+                                    KeyState::Released => sender.release_mouse_button(button)
+                                },
+                                None => println!("Unknown mouse button: {}", mb)
+                            }
+                            InputEvent::MouseWheelEvent(sd) => match sd {
+                                ScrollDirection::Horizontal(amount) => sender.scroll_horizontal(f32_to_i8(amount)),
+                                ScrollDirection::Vertical(amount) => sender.scroll_vertical(f32_to_i8(amount))
+                            }
                         }
                     }
                 }
@@ -81,9 +104,6 @@ fn main() -> Result<()>{
                 captured = false;
                 true
             }
-
-
-
         }, true, HookType::KeyboardMouse)?
     };
 
@@ -183,33 +203,3 @@ fn main() -> Result<()>{
     Ok(())
 }
 
-struct HotKey {
-    key: VirtualKey,
-    available: bool
-}
-
-impl HotKey {
-    fn new(key: VirtualKey) -> Self {
-        Self{
-            key,
-            available: true
-        }
-    }
-    fn triggered(&mut self, event: InputEvent) -> Option<bool> {
-        match event.to_key_event() {
-            Some(KeyEvent{ key, state}) if key == self.key => match state {
-                KeyState::Pressed => if self.available {
-                    self.available = false;
-                    Some(true)
-                } else {
-                    Some(false)
-                }
-                KeyState::Released => {
-                    self.available = true;
-                    Some(false)
-                }
-            },
-            _ => None
-        }
-    }
-}

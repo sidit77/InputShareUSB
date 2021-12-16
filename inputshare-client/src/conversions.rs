@@ -1,98 +1,36 @@
-#![allow(non_upper_case_globals)]
-
+use inputshare_common::{HidModifierKeys, HidMouseButtons, HidScanCode};
 use yawi::{WindowsScanCode, VirtualKey};
 
-pub type HidScanCode = u8;
+pub fn f32_to_i8(v: f32) -> i8 {
+     v.round().clamp(i8::MIN as f32, i8::MAX as f32) as i8
+}
 
-#[allow(dead_code)]
-bitflags! {
-    pub struct HidModifierKeys: u8 {
-        const None    = 0x00;
-        const LCtrl   = 0x01;
-        const LShift  = 0x02;
-        const LAlt    = 0x04;
-        const LMeta   = 0x08;
-        const RCtrl   = 0x10;
-        const RShift  = 0x20;
-        const RAlt    = 0x40;
-        const RMeta   = 0x80;
+pub fn vk_to_mod(key: VirtualKey) -> Option<HidModifierKeys> {
+    match key {
+        VirtualKey::LShift   => Some(HidModifierKeys::LShift),
+        VirtualKey::LControl => Some(HidModifierKeys::LCtrl),
+        VirtualKey::LWin     => Some(HidModifierKeys::LMeta),
+        VirtualKey::LMenu    => Some(HidModifierKeys::LAlt),
+        VirtualKey::RShift   => Some(HidModifierKeys::RShift),
+        VirtualKey::RControl => Some(HidModifierKeys::RCtrl),
+        VirtualKey::RWin     => Some(HidModifierKeys::RMeta),
+        VirtualKey::RMenu    => Some(HidModifierKeys::RAlt),
+        _                    => None
     }
 }
 
-impl HidModifierKeys {
-    pub fn from_virtual_key(key: &VirtualKey) -> Option<Self>{
-        match key {
-            VirtualKey::LShift   => Some(HidModifierKeys::LShift),
-            VirtualKey::LControl => Some(HidModifierKeys::LCtrl),
-            VirtualKey::LWin     => Some(HidModifierKeys::LMeta),
-            VirtualKey::LMenu    => Some(HidModifierKeys::LAlt),
-            VirtualKey::RShift   => Some(HidModifierKeys::RShift),
-            VirtualKey::RControl => Some(HidModifierKeys::RCtrl),
-            VirtualKey::RWin     => Some(HidModifierKeys::RMeta),
-            VirtualKey::RMenu    => Some(HidModifierKeys::RAlt),
-            _                    => None
-        }
-    }
-
-    pub fn to_virtual_keys(&self) -> Vec<VirtualKey> {
-        let mut v = Vec::new();
-        if self.contains(HidModifierKeys::LShift){ v.push(VirtualKey::LShift); }
-        if self.contains(HidModifierKeys::LCtrl ){ v.push(VirtualKey::LControl); }
-        if self.contains(HidModifierKeys::LMeta ){ v.push(VirtualKey::LWin); }
-        if self.contains(HidModifierKeys::LAlt  ){ v.push(VirtualKey::LMenu); }
-        if self.contains(HidModifierKeys::RShift){ v.push(VirtualKey::RShift); }
-        if self.contains(HidModifierKeys::RCtrl ){ v.push(VirtualKey::RControl); }
-        if self.contains(HidModifierKeys::RMeta ){ v.push(VirtualKey::RWin); }
-        if self.contains(HidModifierKeys::RAlt  ){ v.push(VirtualKey::RMenu); }
-        v
-    }
-
-    pub fn to_byte(&self) -> u8 {
-        self.bits
+pub fn vk_to_mb(key: VirtualKey) -> Option<HidMouseButtons> {
+    match key {
+        VirtualKey::LButton  => Some(HidMouseButtons::LButton),
+        VirtualKey::RButton  => Some(HidMouseButtons::RButton),
+        VirtualKey::MButton  => Some(HidMouseButtons::MButton),
+        VirtualKey::XButton1 => Some(HidMouseButtons::Button4),
+        VirtualKey::XButton2 => Some(HidMouseButtons::Button5),
+        _                    => None
     }
 }
 
-#[allow(dead_code)]
-bitflags! {
-    pub struct HidMouseButtons: u8 {
-        const None    = 0x00;
-        const LButton = 0x01;
-        const RButton = 0x02;
-        const MButton = 0x04;
-        const Button4 = 0x08;
-        const Button5 = 0x10;
-    }
-}
-
-impl HidMouseButtons {
-    pub fn from_virtual_key(key: &VirtualKey) -> Option<Self>{
-        match key {
-            VirtualKey::LButton  => Some(HidMouseButtons::LButton),
-            VirtualKey::RButton  => Some(HidMouseButtons::RButton),
-            VirtualKey::MButton  => Some(HidMouseButtons::MButton),
-            VirtualKey::XButton1 => Some(HidMouseButtons::Button4),
-            VirtualKey::XButton2 => Some(HidMouseButtons::Button5),
-            _                    => None
-        }
-    }
-
-    pub fn to_virtual_keys(&self) -> Vec<VirtualKey> {
-        let mut v = Vec::new();
-        if self.contains(HidMouseButtons::LButton){ v.push(VirtualKey::LButton); }
-        if self.contains(HidMouseButtons::RButton){ v.push(VirtualKey::RButton); }
-        if self.contains(HidMouseButtons::MButton){ v.push(VirtualKey::MButton); }
-        if self.contains(HidMouseButtons::Button4){ v.push(VirtualKey::XButton1); }
-        if self.contains(HidMouseButtons::Button5){ v.push(VirtualKey::XButton2); }
-        v
-    }
-
-    pub fn to_byte(&self) -> u8 {
-        self.bits
-    }
-}
-
-
-pub fn convert_win2hid(scancode: &WindowsScanCode) -> Option<HidScanCode> {
+pub fn wsc_to_hsc(scancode: WindowsScanCode) -> Option<HidScanCode> {
     match scancode {
          0x1 => Some(0x29),
          0x2 => Some(0x1e),

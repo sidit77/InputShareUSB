@@ -75,6 +75,9 @@ dependencies = [
 [[package]]
 name = "inputshare-common"
 version = "0.1.0"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "inputshare-server"

@@ -1,4 +1,4 @@
-use inputshare_common::Vec2;
+use inputshare_common::{HidModifierKeys, HidMouseButtons, HidScanCode, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -21,9 +21,41 @@ impl InputSender {
         }
     }
 
-    pub fn move_mouse<X: Into<MouseType>, Y: Into<MouseType>>(&mut self, x: X, y: Y) {
-        self.local_mouse_pos.x += x.into();
-        self.local_mouse_pos.y += y.into();
+    pub fn move_mouse(&mut self, x: MouseType, y: MouseType) {
+        self.local_mouse_pos.x += x;
+        self.local_mouse_pos.y += y;
+    }
+
+    pub fn press_key(&mut self, key: HidScanCode) {
+
+    }
+
+    pub fn release_key(&mut self, key: HidScanCode) {
+
+    }
+
+    pub fn press_modifier(&mut self, key: HidModifierKeys) {
+
+    }
+
+    pub fn release_modifier(&mut self, key: HidModifierKeys) {
+
+    }
+
+    pub fn press_mouse_button(&mut self, button: HidMouseButtons) {
+
+    }
+
+    pub fn release_mouse_button(&mut self, button: HidMouseButtons) {
+
+    }
+
+    pub fn scroll_horizontal(&mut self, amount: i8) {
+
+    }
+
+    pub fn scroll_vertical(&mut self, amount: i8) {
+
     }
 
     pub fn in_sync(&self) -> bool{

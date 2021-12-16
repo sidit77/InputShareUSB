@@ -20,6 +20,45 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
     }
 }
 
+pub type HidScanCode = u8;
+pub use flags::{HidMouseButtons, HidModifierKeys};
+
+#[allow(non_upper_case_globals)]
+pub mod flags {
+    use bitflags::bitflags;
+    bitflags! {
+        pub struct HidModifierKeys: u8 {
+            const None    = 0x00;
+            const LCtrl   = 0x01;
+            const LShift  = 0x02;
+            const LAlt    = 0x04;
+            const LMeta   = 0x08;
+            const RCtrl   = 0x10;
+            const RShift  = 0x20;
+            const RAlt    = 0x40;
+            const RMeta   = 0x80;
+        }
+
+        pub struct HidMouseButtons: u8 {
+            const None    = 0x00;
+            const LButton = 0x01;
+            const RButton = 0x02;
+            const MButton = 0x04;
+            const Button4 = 0x08;
+            const Button5 = 0x10;
+        }
+    }
+
+}
+
+
+
+
+
+
+
+
+
 
 pub struct PackageIds {}
 impl PackageIds {
