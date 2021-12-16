@@ -5,6 +5,8 @@ use std::convert::TryInto;
 
 pub const DEFAULT_PORT: u16 = 60067;
 
+pub const IDENTIFIER: &str = "inputshare-usb";
+
 pub struct PackageIds {}
 impl PackageIds {
     pub const KEYBOARD: u8 = 0x1;

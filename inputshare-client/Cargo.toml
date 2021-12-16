@@ -19,12 +19,12 @@ anyhow = "1.0"
 # mio-extras = "2.0"
 # console = "0.14.1"
 # yawi = { path = "../yawi", features = ["serde"] }
-# inputshare-common = { path = "../inputshare-common" }
+inputshare-common = { path = "../inputshare-common" }
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef", "basetsd", "processthreadsapi", "errhandlingapi", "winsock2", "wincon"] }
 ctrlc = "3.2"
 winsock2_extensions = { path = "../lib/winsock2_extensions" }
 yawi = {path = "../lib/yawi"}
-
+udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

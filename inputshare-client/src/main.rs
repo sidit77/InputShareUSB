@@ -1,15 +1,18 @@
+mod sender;
+
 use std::{mem};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::ffi::OsStr;
-use std::io::ErrorKind;
+use std::io::{Error, ErrorKind};
 use std::iter::once;
-use std::net::UdpSocket;
+use std::net::{ToSocketAddrs, UdpSocket};
 use std::os::windows::prelude::OsStrExt;
 use std::ptr::{null, null_mut};
 use std::time::Duration;
 use anyhow::Result;
+use udp_connections::{Client, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::shared::minwindef::{FALSE};
 use winapi::shared::windef::{HWND};
 use winapi::shared::winerror::WAIT_TIMEOUT;
@@ -17,8 +20,9 @@ use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0, WAIT_FAILED};
 use winapi::um::winuser::{CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, DefWindowProcW, DispatchMessageW, HWND_MESSAGE, MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, PostThreadMessageW, QS_ALLINPUT, RegisterClassW, TranslateMessage, WM_QUIT, WM_USER, WNDCLASSW};
+use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
-use yawi::{HookType, InputHook};
+use yawi::{HookType, InputEvent, InputHook, KeyState, VirtualKey};
 
 fn main() -> Result<()>{
     {
@@ -41,38 +45,80 @@ fn main() -> Result<()>{
 
     const SOCKET: u32 = WM_USER + 1;
 
-    let socket = UdpSocket::bind("127.0.0.1:12345")?;
+    let socket = UdpSocket::bind(Endpoint::remote_any())?;
     socket.notify(handle, SOCKET, NetworkEvents::Read)?;
 
+    let mut socket = Client::new(socket, IDENTIFIER);
+    println!("Running on {}", socket.local_addr()?);
+    let server = "raspberrypi.local:12345"
+        .to_socket_addrs()?
+        .filter(|x| x.is_ipv4())
+        .next()
+        .ok_or(Error::new(ErrorKind::AddrNotAvailable, "Could not find suitable address!"))?;
+    println!("Connecting to {}", server);
+    socket.connect(server)?;
 
+    let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
-        wait_message_timeout(None)?;
+        wait_message_timeout(Some(Duration::from_millis(100)))?;
         while let Some(msg) = get_message() {
             unsafe {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             match msg.message {
-                WM_QUIT => break 'outer,
-                SOCKET => {
-                    println!("FINALLY");
-                    let mut buf = [0u8; 1000];
-                    loop {
-                        match socket.recv_from(&mut buf) {
-                            Ok((size, src)) => println!("Got {:?} from {}", &buf[..size], src),
-                            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
-                            Err(e) => Err(e)?
-                        }
-
+                WM_QUIT => {
+                    if socket.is_connected() {
+                        socket.disconnect()?;
+                    } else {
+                        break 'outer
                     }
+
+                },
+                //SOCKET => {
+                //    println!("FINALLY");
+                //    let mut buf = [0u8; 1000];
+                //    loop {
+                //        match socket.recv_from(&mut buf) {
+                //            Ok((size, src)) => println!("Got {:?} from {}", &buf[..size], src),
+                //            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                //            Err(e) => Err(e)?
+                //        }
+//
+                //    }
+                //}
+                _ => {}
+            }
+        }
+
+        socket.update().unwrap();
+        while let Some(event) = socket.next_event(&mut buffer).unwrap() {
+            match event {
+                ClientEvent::Connected(id) => {
+                    println!("Connected as {}", id);
+                },
+                ClientEvent::Disconnected(reason) => {
+                    println!("Disconnected: {:?}", reason);
+                    break 'outer
+                },
+                ClientEvent::PacketReceived(latest, payload) => {
+                    //println!("Packet {:?}", payload);
+                },
+                ClientEvent::PacketAcknowledged(seq) => {
+                    println!("{} got acknowledged", seq);
+                }
+            }
+        }
+
+        while let Some(event) = input_events.borrow_mut().pop_front() {
+            match event {
+                InputEvent::KeyboardKeyEvent(VirtualKey::Space, _, KeyState::Pressed) => if socket.is_connected() {
+                    let id = socket.send(&[0])?;
+                    println!("Sent {}", id);
                 }
                 _ => {}
             }
         }
-        while let Some(event) = input_events.borrow_mut().pop_front() {
-            println!("{:?}", event);
-        }
-        println!("Tick");
     }
 
 //
