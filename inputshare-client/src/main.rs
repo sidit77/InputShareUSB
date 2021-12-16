@@ -1,9 +1,7 @@
 mod sender;
 
 use std::{mem};
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::ffi::OsStr;
 use std::io::{Error, ErrorKind};
@@ -35,23 +33,29 @@ fn main() -> Result<()>{
         })?;
     }
 
-    let input_events = Rc::new(RefCell::new(InputSender::new()));
+    let input_events:Rc<RefCell<Option<InputSender>>> = Rc::new(RefCell::new(None));
 
     let hook = {
         let input_events = input_events.clone();
         let mut old_mouse_pos = None;
+        let mut captured = false;
 
         InputHook::new(move |event|{
-            match event {
-                InputEvent::MouseMoveEvent(x, y) => {
-                    if let Some((ox, oy)) = old_mouse_pos {
-                        (*input_events).borrow_mut().move_mouse(x - ox, y - oy);
-                    }
-                    old_mouse_pos = Some((x,y))
-                },
-                _ => {}
+            if let Some(sender) = (*input_events).borrow_mut().as_mut(){
+                match event {
+                    InputEvent::MouseMoveEvent(x, y) => {
+                        if let Some((ox, oy)) = old_mouse_pos {
+                            sender.move_mouse(x - ox, y - oy);
+                        }
+                        old_mouse_pos = Some((x,y))
+                    },
+                    _ => {}
+                }
+                true
+            } else {
+                captured = false;
+                true
             }
-            true
         }, true, HookType::KeyboardMouse)?
     };
 
@@ -113,16 +117,18 @@ fn main() -> Result<()>{
             match event {
                 ClientEvent::Connected(id) => {
                     println!("Connected as {}", id);
-                    //input_events.borrow_mut().get_mut().insert(InputSender::new());
+                    *(*input_events).borrow_mut() = Some(InputSender::new());
                 },
                 ClientEvent::Disconnected(reason) => {
                     println!("Disconnected: {:?}", reason);
-                    //input_events.borrow_mut().get_mut().take();
+                    *(*input_events).borrow_mut() = None;
                     break 'outer
                 },
                 ClientEvent::PacketReceived(latest, payload) => {
                     if latest {
-                        (*input_events).borrow_mut().read_packet(payload)?;
+                        if let Some(sender) = (*input_events).borrow_mut().as_mut() {
+                            sender.read_packet(payload)?;
+                        }
                     }
                     //println!("Packet {:?}", payload);
                 },
@@ -132,9 +138,12 @@ fn main() -> Result<()>{
             }
         }
 
-        if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !(*input_events).borrow_mut().in_sync(){
-            socket.send((*input_events).borrow_mut().write_packet()?)?;
-            last_send = Instant::now();
+
+        if let Some(sender) = (*input_events).borrow_mut().as_mut() {
+            if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
+                socket.send(sender.write_packet()?)?;
+                last_send = Instant::now();
+            }
         }
 
     }

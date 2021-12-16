@@ -14,3 +14,4 @@ mio = {version = "0.8", features = ["os-poll", "net"]}
 mio-signals = "0.2.0"
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
 byteorder = "1"
+vec_map = "0.8.2"

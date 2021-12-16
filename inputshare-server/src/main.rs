@@ -11,6 +11,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{Endpoint, MAX_PACKET_SIZE, Server, ServerEvent, Transport};
+use vec_map::VecMap;
 use inputshare_common::IDENTIFIER;
 use crate::receiver::{InputEvent, InputReceiver};
 
@@ -33,8 +34,7 @@ fn main() -> Result<()>{
 
     println!("running on {}", socket.local_addr()?);
 
-    let mut receiver = InputReceiver::new();
-
+    let mut receivers = VecMap::new();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
         poll.poll(&mut events, Some(Duration::from_secs(1)))?;
@@ -60,30 +60,34 @@ fn main() -> Result<()>{
             match event {
                 ServerEvent::ClientConnected(client_id) => {
                     println!("Client {} connected", client_id);
+                    receivers.insert(client_id.into(), InputReceiver::new());
                 },
                 ServerEvent::ClientDisconnected(client_id, reason) => {
                     println!("Client {} disconnected: {:?}", client_id, reason);
+                    receivers.remove(client_id.into());
                 },
                 ServerEvent::PacketReceived(client_id, latest, payload) => {
                     if latest {
-                        socket.send(client_id, receiver.process_packet(payload)?)?;
-                        while let Some(event) = receiver.get_event() {
-                            match event {
-                                InputEvent::MouseMove(dx, dy) => {
-                                    //let mut report = [0u8; 7];
-                                    //let mut buf = &mut report[..];
-                                    //buf.write_u8(0)?;
-                                    //buf.write_i16::<LittleEndian>(dx as i16)?;
-                                    //buf.write_i16::<LittleEndian>(dy as i16)?;
-                                    //buf.write_i8(0)?;
-                                    //buf.write_i8(0)?;
-                                    //mouse_dev.write_all(&report)?;
-                                    println!("{} {}", dx, dy);
+                        if let Some(receiver) = receivers.get_mut(client_id.into()) {
+                            socket.send(client_id, receiver.process_packet(payload)?)?;
+                            while let Some(event) = receiver.get_event() {
+                                match event {
+                                    InputEvent::MouseMove(dx, dy) => {
+                                        //let mut report = [0u8; 7];
+                                        //let mut buf = &mut report[..];
+                                        //buf.write_u8(0)?;
+                                        //buf.write_i16::<LittleEndian>(dx as i16)?;
+                                        //buf.write_i16::<LittleEndian>(dy as i16)?;
+                                        //buf.write_i8(0)?;
+                                        //buf.write_i8(0)?;
+                                        //mouse_dev.write_all(&report)?;
+                                        println!("{} {}", dx, dy);
+                                    }
                                 }
+                                //println!("{:?}", event);
                             }
-                            //println!("{:?}", event);
-
                         }
+
                     }
                 },
                 ServerEvent::PacketAcknowledged(_, _) => {
