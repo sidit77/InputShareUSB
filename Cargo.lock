@@ -62,6 +62,7 @@ name = "inputshare-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "ctrlc",
  "inputshare-common",
  "udp_connections",
@@ -80,6 +81,7 @@ name = "inputshare-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "inputshare-common",
  "mio",
  "mio-signals",
@@ -226,7 +228,7 @@ dependencies = [
 [[package]]
 name = "udp_connections"
 version = "0.1.0"
-source = "git+https://github.com/sidit77/udp_connections.git#10b5fa2f4c5128bc304bb7beed1f5062b7c8718f"
+source = "git+https://github.com/sidit77/udp_connections.git#9ff3357fba5431f81cd67a4168d05bb140984c53"
 dependencies = [
  "byteorder",
  "crc32fast",

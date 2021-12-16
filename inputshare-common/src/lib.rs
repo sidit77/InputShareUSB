@@ -2,10 +2,24 @@ use std::net::TcpStream;
 use std::io::{Read, Write, ErrorKind, Error};
 use std::borrow::Cow;
 use std::convert::TryInto;
+use std::fmt::Debug;
 
 pub const DEFAULT_PORT: u16 = 60067;
 
 pub const IDENTIFIER: &str = "inputshare-usb";
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Vec2<T> where T: Debug + Copy + PartialEq {
+    pub x: T,
+    pub y: T
+}
+
+impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
+    pub fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+}
+
 
 pub struct PackageIds {}
 impl PackageIds {

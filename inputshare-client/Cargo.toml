@@ -25,6 +25,7 @@ ctrlc = "3.2"
 winsock2_extensions = { path = "../lib/winsock2_extensions" }
 yawi = {path = "../lib/yawi"}
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
+byteorder = "1"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

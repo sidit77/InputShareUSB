@@ -1,6 +1,7 @@
 mod sender;
 
 use std::{mem};
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::convert::TryInto;
@@ -10,7 +11,8 @@ use std::iter::once;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::os::windows::prelude::OsStrExt;
 use std::ptr::{null, null_mut};
-use std::time::Duration;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 use anyhow::Result;
 use udp_connections::{Client, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::shared::minwindef::{FALSE};
@@ -23,6 +25,7 @@ use winapi::um::winuser::{CreateWindowExW, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, Def
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, InputEvent, InputHook, KeyState, VirtualKey};
+use crate::sender::InputSender;
 
 fn main() -> Result<()>{
     {
@@ -32,12 +35,25 @@ fn main() -> Result<()>{
         })?;
     }
 
-    let mut input_events = RefCell::new(VecDeque::new());
+    let input_events = Rc::new(RefCell::new(InputSender::new()));
 
-    let hook = InputHook::new(|event|{
-            input_events.borrow_mut().push_back(event);
+    let hook = {
+        let input_events = input_events.clone();
+        let mut old_mouse_pos = None;
+
+        InputHook::new(move |event|{
+            match event {
+                InputEvent::MouseMoveEvent(x, y) => {
+                    if let Some((ox, oy)) = old_mouse_pos {
+                        (*input_events).borrow_mut().move_mouse(x - ox, y - oy);
+                    }
+                    old_mouse_pos = Some((x,y))
+                },
+                _ => {}
+            }
             true
-        }, true, HookType::Keyboard)?;
+        }, true, HookType::KeyboardMouse)?
+    };
 
     let handle = create_window("Dummy Window");//window.handle.hwnd().unwrap();//unsafe{GetConsoleWindow()};
     //let timer = unsafe {SetTimer(handle, 1, 1000, None) };
@@ -58,6 +74,7 @@ fn main() -> Result<()>{
     println!("Connecting to {}", server);
     socket.connect(server)?;
 
+    let mut last_send = Instant::now();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
         wait_message_timeout(Some(Duration::from_millis(100)))?;
@@ -96,32 +113,32 @@ fn main() -> Result<()>{
             match event {
                 ClientEvent::Connected(id) => {
                     println!("Connected as {}", id);
+                    //input_events.borrow_mut().get_mut().insert(InputSender::new());
                 },
                 ClientEvent::Disconnected(reason) => {
                     println!("Disconnected: {:?}", reason);
+                    //input_events.borrow_mut().get_mut().take();
                     break 'outer
                 },
                 ClientEvent::PacketReceived(latest, payload) => {
+                    if latest {
+                        (*input_events).borrow_mut().read_packet(payload)?;
+                    }
                     //println!("Packet {:?}", payload);
                 },
-                ClientEvent::PacketAcknowledged(seq) => {
-                    println!("{} got acknowledged", seq);
+                ClientEvent::PacketAcknowledged(_) => {
+                    //println!("{} got acknowledged", seq);
                 }
             }
         }
 
-        while let Some(event) = input_events.borrow_mut().pop_front() {
-            match event {
-                InputEvent::KeyboardKeyEvent(VirtualKey::Space, _, KeyState::Pressed) => if socket.is_connected() {
-                    let id = socket.send(&[0])?;
-                    println!("Sent {}", id);
-                }
-                _ => {}
-            }
+        if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !(*input_events).borrow_mut().in_sync(){
+            socket.send((*input_events).borrow_mut().write_packet()?)?;
+            last_send = Instant::now();
         }
+
     }
 
-//
     println!("Shutdown");
 
     hook.remove();

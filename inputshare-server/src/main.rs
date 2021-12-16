@@ -1,15 +1,24 @@
+mod receiver;
+
 use std::fmt::{Debug, Formatter};
+use std::fs::OpenOptions;
+use std::io::{Cursor, Write};
 use std::net::{SocketAddr};
 use std::time::Duration;
 use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
+use byteorder::{LittleEndian, WriteBytesExt};
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{Endpoint, MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use inputshare_common::IDENTIFIER;
+use crate::receiver::{InputEvent, InputReceiver};
 
 fn main() -> Result<()>{
     println!("Hello World!");
+    //let mut mouse_dev = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
+
+
     const SERVER: Token = Token(0);
     const SIGNAL: Token = Token(1);
     let mut poll = Poll::new()?;
@@ -24,6 +33,7 @@ fn main() -> Result<()>{
 
     println!("running on {}", socket.local_addr()?);
 
+    let mut receiver = InputReceiver::new();
 
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
@@ -56,11 +66,27 @@ fn main() -> Result<()>{
                 },
                 ServerEvent::PacketReceived(client_id, latest, payload) => {
                     if latest {
-                        println!("Packet {:?} from {}", payload, client_id);
-                        socket.send(client_id, &[0])?;
+                        socket.send(client_id, receiver.process_packet(payload)?)?;
+                        while let Some(event) = receiver.get_event() {
+                            match event {
+                                InputEvent::MouseMove(dx, dy) => {
+                                    //let mut report = [0u8; 7];
+                                    //let mut buf = &mut report[..];
+                                    //buf.write_u8(0)?;
+                                    //buf.write_i16::<LittleEndian>(dx as i16)?;
+                                    //buf.write_i16::<LittleEndian>(dy as i16)?;
+                                    //buf.write_i8(0)?;
+                                    //buf.write_i8(0)?;
+                                    //mouse_dev.write_all(&report)?;
+                                    println!("{} {}", dx, dy);
+                                }
+                            }
+                            //println!("{:?}", event);
+
+                        }
                     }
                 },
-                ServerEvent::PacketAcknowledged(client_id, seq) => {
+                ServerEvent::PacketAcknowledged(_, _) => {
                     //println!("Packet {} acknowledged for {}", seq, client_id)
                 }
             }
