@@ -57,6 +57,7 @@ fn main() -> Result<()>{
                         Some(event) if event.key == hotkey => {
                             if event.state == KeyState::Pressed {
                                 captured = !captured;
+                                println!("Input captured: {}", captured);
                                 old_mouse_pos = None;
                             }
                             return false

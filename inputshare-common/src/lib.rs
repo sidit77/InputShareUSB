@@ -51,7 +51,18 @@ pub mod flags {
 
 }
 
-
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MessageType {
+    KeyPress,
+    KeyRelease,
+    ModifierPress,
+    ModifierRelease,
+    MouseButtonPress,
+    MouseButtonRelease,
+    HorizontalScrolling,
+    VerticalScrolling
+}
 
 
 
