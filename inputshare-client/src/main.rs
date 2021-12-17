@@ -14,11 +14,25 @@ use winapi::um::winuser::{DispatchMessageW, PostThreadMessageW, TranslateMessage
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
-use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hsc};
+use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hkc};
 use crate::sender::InputSender;
 use crate::windows::{create_window, get_message, wait_message_timeout};
 
 fn main() -> Result<()>{
+
+
+    //for key in u16::MIN..=u16::MAX {
+    //    match wsc_to_hsc(key) {
+    //        Some(hsc) => match HidKeyCode::from(hsc) {
+    //            HidKeyCode::None => {},
+    //            hkc => println!("0x{:x} => Some(HidKeyCode::{:?}),", key, hkc)
+    //        },
+    //        None => {}
+    //    }
+    //}
+//
+    //return Ok(());
+
     {
         let thread_id = unsafe {GetCurrentThreadId()};
         ctrlc::set_handler(move || {
@@ -77,7 +91,7 @@ fn main() -> Result<()>{
                                     KeyState::Pressed => sender.press_modifier(modifier),
                                     KeyState::Released => sender.release_modifier(modifier)
                                 }
-                                None => match wsc_to_hsc(sc) {
+                                None => match wsc_to_hkc(sc) {
                                     Some(key) => match ks {
                                         KeyState::Pressed => sender.press_key(key),
                                         KeyState::Released => sender.release_key(key)

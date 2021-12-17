@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use inputshare_common::{HidModifierKey, HidMouseButton, HidScanCode, MessageType, Vec2};
+use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, HidScanCode, MessageType, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -9,8 +9,8 @@ type MouseType = i64;
 #[derive(Debug, Copy, Clone)]
 pub enum InputEvent {
     MouseMove(MouseType, MouseType),
-    KeyPress(HidScanCode),
-    KeyRelease(HidScanCode),
+    KeyPress(HidKeyCode),
+    KeyRelease(HidKeyCode),
     ModifierPress(HidModifierKey),
     ModifierRelease(HidModifierKey),
     MouseButtonPress(HidMouseButton),
@@ -62,8 +62,8 @@ impl InputReceiver {
             let msg_id = packet.read_u8()?;
             let msg_arg = packet.read_u8()?;
             match MessageType::try_from(msg_id) {
-                Ok(MessageType::KeyPress) => self.events.push_back(InputEvent::KeyPress(msg_arg)),
-                Ok(MessageType::KeyRelease) => self.events.push_back(InputEvent::KeyRelease(msg_arg)),
+                Ok(MessageType::KeyPress) => self.events.push_back(InputEvent::KeyPress(HidKeyCode::from(msg_arg))),
+                Ok(MessageType::KeyRelease) => self.events.push_back(InputEvent::KeyRelease(HidKeyCode::from(msg_arg))),
                 Ok(MessageType::ModifierPress) => self.events.push_back(InputEvent::ModifierPress(HidModifierKey::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::ModifierRelease) => self.events.push_back(InputEvent::ModifierRelease(HidModifierKey::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::MouseButtonPress) => self.events.push_back(InputEvent::MouseButtonPress(HidMouseButton::from_bits(msg_arg).unwrap())),
