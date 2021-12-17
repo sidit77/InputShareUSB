@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, HidScanCode, MessageType, Vec2};
+use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, MessageType, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -16,7 +16,8 @@ pub enum InputEvent {
     MouseButtonPress(HidMouseButton),
     MouseButtonRelease(HidMouseButton),
     HorizontalScrolling(i8),
-    VerticalScrolling(i8)
+    VerticalScrolling(i8),
+    Reset,
 }
 
 #[derive(Debug)]
@@ -70,7 +71,7 @@ impl InputReceiver {
                 Ok(MessageType::MouseButtonRelease) => self.events.push_back(InputEvent::MouseButtonRelease(HidMouseButton::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::HorizontalScrolling) => self.events.push_back(InputEvent::HorizontalScrolling(msg_arg as i8)),
                 Ok(MessageType::VerticalScrolling) => self.events.push_back(InputEvent::VerticalScrolling(msg_arg as i8)),
-                Ok(MessageType::Reset) => {}
+                Ok(MessageType::Reset) => self.events.push_back(InputEvent::Reset),
                 Err(e) => println!("Invalid message: {}", e)
             }
         }

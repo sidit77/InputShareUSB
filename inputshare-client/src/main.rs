@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use udp_connections::{Client, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::um::winuser::{DispatchMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER};
+use winapi::um::winuser::{DispatchMessageW, GetCursorPos, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
@@ -44,7 +44,12 @@ fn main() -> Result<()>{
 
     let hook = {
         let input_events = input_events.clone();
-        let mut old_mouse_pos = None;
+        let mut old_mouse_pos = unsafe {
+            let mut point = std::mem::zeroed();
+            GetCursorPos(&mut point);
+            (point.x, point.y)
+        };
+
         let mut captured = false;
         let hotkey = VirtualKey::Apps;
         let mut pressed_keys = Vec::new();
@@ -65,6 +70,12 @@ fn main() -> Result<()>{
                 None => true
             };
 
+            if !captured {
+                if let InputEvent::MouseMoveEvent(x, y) = event {
+                    old_mouse_pos = (x,y);
+                }
+            }
+
             if let Some(sender) = (*input_events).borrow_mut().as_mut(){
                 if should_handle {
                     match event.to_key_event() {
@@ -72,7 +83,6 @@ fn main() -> Result<()>{
                             if event.state == KeyState::Pressed {
                                 captured = !captured;
                                 println!("Input captured: {}", captured);
-                                old_mouse_pos = None;
                             }
                             return false
                         }
@@ -81,10 +91,9 @@ fn main() -> Result<()>{
                     if captured {
                         match event {
                             InputEvent::MouseMoveEvent(x, y) => {
-                                if let Some((ox, oy)) = old_mouse_pos {
-                                    sender.move_mouse((x - ox) as i64, (y - oy) as i64);
-                                }
-                                old_mouse_pos = Some((x,y))
+                                let (ox, oy) = old_mouse_pos;
+                                sender.move_mouse((x - ox) as i64, (y - oy) as i64);
+                                //old_mouse_pos = Some((x,y))
                             }
                             InputEvent::KeyboardKeyEvent(vk, sc, ks) => match vk_to_mod(vk) {
                                 Some(modifier) => match ks {
@@ -206,7 +215,7 @@ fn main() -> Result<()>{
             if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
                 let i = socket.send(sender.write_packet()?)?;
                 last_send = Instant::now();
-                println!("sending {}", i);
+                //println!("sending {}", i);
             }
         }
 
