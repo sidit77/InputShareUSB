@@ -1,31 +1,31 @@
-use inputshare_common::{HidModifierKeys, HidMouseButtons, HidScanCode};
+use inputshare_common::{HidModifierKey, HidMouseButton, HidScanCode};
 use yawi::{WindowsScanCode, VirtualKey};
 
 pub fn f32_to_i8(v: f32) -> i8 {
      v.round().clamp(i8::MIN as f32, i8::MAX as f32) as i8
 }
 
-pub fn vk_to_mod(key: VirtualKey) -> Option<HidModifierKeys> {
+pub fn vk_to_mod(key: VirtualKey) -> Option<HidModifierKey> {
     match key {
-        VirtualKey::LShift   => Some(HidModifierKeys::LShift),
-        VirtualKey::LControl => Some(HidModifierKeys::LCtrl),
-        VirtualKey::LWin     => Some(HidModifierKeys::LMeta),
-        VirtualKey::LMenu    => Some(HidModifierKeys::LAlt),
-        VirtualKey::RShift   => Some(HidModifierKeys::RShift),
-        VirtualKey::RControl => Some(HidModifierKeys::RCtrl),
-        VirtualKey::RWin     => Some(HidModifierKeys::RMeta),
-        VirtualKey::RMenu    => Some(HidModifierKeys::RAlt),
+        VirtualKey::LShift   => Some(HidModifierKey::LShift),
+        VirtualKey::LControl => Some(HidModifierKey::LCtrl),
+        VirtualKey::LWin     => Some(HidModifierKey::LMeta),
+        VirtualKey::LMenu    => Some(HidModifierKey::LAlt),
+        VirtualKey::RShift   => Some(HidModifierKey::RShift),
+        VirtualKey::RControl => Some(HidModifierKey::RCtrl),
+        VirtualKey::RWin     => Some(HidModifierKey::RMeta),
+        VirtualKey::RMenu    => Some(HidModifierKey::RAlt),
         _                    => None
     }
 }
 
-pub fn vk_to_mb(key: VirtualKey) -> Option<HidMouseButtons> {
+pub fn vk_to_mb(key: VirtualKey) -> Option<HidMouseButton> {
     match key {
-        VirtualKey::LButton  => Some(HidMouseButtons::LButton),
-        VirtualKey::RButton  => Some(HidMouseButtons::RButton),
-        VirtualKey::MButton  => Some(HidMouseButtons::MButton),
-        VirtualKey::XButton1 => Some(HidMouseButtons::Button4),
-        VirtualKey::XButton2 => Some(HidMouseButtons::Button5),
+        VirtualKey::LButton  => Some(HidMouseButton::LButton),
+        VirtualKey::RButton  => Some(HidMouseButton::RButton),
+        VirtualKey::MButton  => Some(HidMouseButton::MButton),
+        VirtualKey::XButton1 => Some(HidMouseButton::Button4),
+        VirtualKey::XButton2 => Some(HidMouseButton::Button5),
         _                    => None
     }
 }

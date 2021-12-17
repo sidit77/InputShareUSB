@@ -190,8 +190,9 @@ fn main() -> Result<()>{
 
         if let Some(sender) = (*input_events).borrow_mut().as_mut() {
             if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
-                socket.send(sender.write_packet()?)?;
+                let i = socket.send(sender.write_packet()?)?;
                 last_send = Instant::now();
+                println!("sending {}", i);
             }
         }
 

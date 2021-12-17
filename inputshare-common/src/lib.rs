@@ -3,6 +3,7 @@ use std::io::{Read, Write, ErrorKind, Error};
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt::Debug;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub const DEFAULT_PORT: u16 = 60067;
 
@@ -21,13 +22,13 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
 }
 
 pub type HidScanCode = u8;
-pub use flags::{HidMouseButtons, HidModifierKeys};
+pub use flags::{HidMouseButton, HidModifierKey};
 
 #[allow(non_upper_case_globals)]
 pub mod flags {
     use bitflags::bitflags;
     bitflags! {
-        pub struct HidModifierKeys: u8 {
+        pub struct HidModifierKey: u8 {
             const None    = 0x00;
             const LCtrl   = 0x01;
             const LShift  = 0x02;
@@ -39,7 +40,7 @@ pub mod flags {
             const RMeta   = 0x80;
         }
 
-        pub struct HidMouseButtons: u8 {
+        pub struct HidMouseButton: u8 {
             const None    = 0x00;
             const LButton = 0x01;
             const RButton = 0x02;
@@ -51,7 +52,7 @@ pub mod flags {
 
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum MessageType {
     KeyPress,
@@ -61,12 +62,9 @@ pub enum MessageType {
     MouseButtonPress,
     MouseButtonRelease,
     HorizontalScrolling,
-    VerticalScrolling
+    VerticalScrolling,
+    Reset
 }
-
-
-
-
 
 
 

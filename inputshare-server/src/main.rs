@@ -81,8 +81,9 @@ fn main() -> Result<()>{
                                         //buf.write_i8(0)?;
                                         //buf.write_i8(0)?;
                                         //mouse_dev.write_all(&report)?;
-                                        println!("{} {}", dx, dy);
+                                        //println!("{} {}", dx, dy);
                                     }
+                                    event => println!("{:?}", event)
                                 }
                                 //println!("{:?}", event);
                             }

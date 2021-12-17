@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use inputshare_common::{HidModifierKeys, HidMouseButtons, HidScanCode, MessageType, Vec2};
+use inputshare_common::{HidModifierKey, HidMouseButton, HidScanCode, MessageType, Vec2};
 use std::io::{Result, Write};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -32,35 +32,35 @@ impl InputSender {
     }
 
     pub fn press_key(&mut self, key: HidScanCode) {
-        self.message_queue.push_back([MessageType::KeyPress as u8, key])
+        self.message_queue.push_back([MessageType::KeyPress.into(), key])
     }
 
     pub fn release_key(&mut self, key: HidScanCode) {
-        self.message_queue.push_back([MessageType::KeyRelease as u8, key])
+        self.message_queue.push_back([MessageType::KeyRelease.into(), key])
     }
 
-    pub fn press_modifier(&mut self, key: HidModifierKeys) {
-        self.message_queue.push_back([MessageType::ModifierPress as u8, key.bits()])
+    pub fn press_modifier(&mut self, key: HidModifierKey) {
+        self.message_queue.push_back([MessageType::ModifierPress.into(), key.bits()])
     }
 
-    pub fn release_modifier(&mut self, key: HidModifierKeys) {
-        self.message_queue.push_back([MessageType::ModifierRelease as u8, key.bits()])
+    pub fn release_modifier(&mut self, key: HidModifierKey) {
+        self.message_queue.push_back([MessageType::ModifierRelease.into(), key.bits()])
     }
 
-    pub fn press_mouse_button(&mut self, button: HidMouseButtons) {
-        self.message_queue.push_back([MessageType::MouseButtonPress as u8, button.bits()])
+    pub fn press_mouse_button(&mut self, button: HidMouseButton) {
+        self.message_queue.push_back([MessageType::MouseButtonPress.into(), button.bits()])
     }
 
-    pub fn release_mouse_button(&mut self, button: HidMouseButtons) {
-        self.message_queue.push_back([MessageType::MouseButtonRelease as u8, button.bits()])
+    pub fn release_mouse_button(&mut self, button: HidMouseButton) {
+        self.message_queue.push_back([MessageType::MouseButtonRelease.into(), button.bits()])
     }
 
     pub fn scroll_horizontal(&mut self, amount: i8) {
-        self.message_queue.push_back([MessageType::HorizontalScrolling as u8, amount as u8])
+        self.message_queue.push_back([MessageType::HorizontalScrolling.into(), amount as u8])
     }
 
     pub fn scroll_vertical(&mut self, amount: i8) {
-        self.message_queue.push_back([MessageType::VerticalScrolling as u8, amount as u8])
+        self.message_queue.push_back([MessageType::VerticalScrolling.into(), amount as u8])
     }
 
     pub fn in_sync(&self) -> bool{
@@ -72,7 +72,7 @@ impl InputSender {
         self.remote_mouse_pos.y = packet.read_i64::<LittleEndian>()?;
         let received_index = packet.read_u64::<LittleEndian>()?;
         let diff = received_index.checked_sub(self.last_message).unwrap_or(0);
-        self.message_queue.drain(..diff);
+        self.message_queue.drain(..(diff as usize));
         self.last_message = received_index;
 
         Ok(())
