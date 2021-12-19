@@ -16,7 +16,6 @@ use crate::receiver::{InputEvent, InputReceiver};
 
 fn main() -> Result<()>{
     println!("Hello World!");
-    //let mut mouse_dev = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
 
     let mut mouse = Mouse::new()?;
     let mut keyboard = Keyboard::new()?;

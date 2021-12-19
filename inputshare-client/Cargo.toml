@@ -11,7 +11,7 @@ build = "build.rs"
 # confy = "0.4"
 # serde = { version = "1.0", features = ["derive"] }
 # pico-args = "0.4"
-anyhow = "1.0"
+
 # bitflags = "1.2"
 # byteorder = "1.4"
 # ctrlc = "3.1"
@@ -19,13 +19,18 @@ anyhow = "1.0"
 # mio-extras = "2.0"
 # console = "0.14.1"
 # yawi = { path = "../yawi", features = ["serde"] }
-inputshare-common = { path = "../inputshare-common" }
+
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef", "basetsd", "processthreadsapi", "errhandlingapi", "winsock2", "wincon"] }
 ctrlc = "3.2"
+byteorder = "1"
+anyhow = "1.0"
+native-windows-gui = "1.0"
+native-windows-derive = "1.0"
+inputshare-common = { path = "../inputshare-common" }
 winsock2_extensions = { path = "../lib/winsock2_extensions" }
 yawi = {path = "../lib/yawi"}
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
-byteorder = "1"
+
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

@@ -1,37 +1,39 @@
+#![windows_subsystem = "windows"]
+
 mod sender;
 mod windows;
 mod conversions;
 
+use native_windows_gui as nwg;
 use std::cell::RefCell;
-use std::io::{Error, ErrorKind};
 use std::net::{ToSocketAddrs, UdpSocket};
+use std::ptr::null_mut;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use anyhow::Result;
-use udp_connections::{Client, ClientEvent, Endpoint, MAX_PACKET_SIZE};
+use native_windows_derive::NwgUi;
+use native_windows_gui::{CharEffects, NativeUi};
+use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::um::winuser::{DispatchMessageW, GetCursorPos, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER};
+use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hkc};
 use crate::sender::InputSender;
-use crate::windows::{create_window, get_message, wait_message_timeout};
+use crate::windows::{get_message, wait_message_timeout};
+
+const SOCKET: u32 = WM_USER + 1;
+const CONNECT: u32 = WM_USER + 2;
+const TOGGLED: u32 = WM_USER + 3;
 
 fn main() -> Result<()>{
+    nwg::init().expect("Failed to init Native Windows GUI");
+    nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
 
-    //for key in u16::MIN..=u16::MAX {
-    //    match wsc_to_hsc(key) {
-    //        Some(hsc) => match HidKeyCode::from(hsc) {
-    //            HidKeyCode::None => {},
-    //            hkc => println!("0x{:x} => Some(HidKeyCode::{:?}),", key, hkc)
-    //        },
-    //        None => {}
-    //    }
-    //}
-//
-    //return Ok(());
+    let server = "raspberrypi.local:12345";
+
 
     {
         let thread_id = unsafe {GetCurrentThreadId()};
@@ -82,7 +84,10 @@ fn main() -> Result<()>{
                         Some(event) if event.key == hotkey => {
                             if event.state == KeyState::Pressed {
                                 captured = !captured;
-                                println!("Input captured: {}", captured);
+                                unsafe {
+                                    PostMessageW(null_mut(), TOGGLED, if captured { 0 } else { 1 }, 0);
+                                }
+                                //println!("Input captured: {}", captured);
                             }
                             return false
                         }
@@ -131,44 +136,61 @@ fn main() -> Result<()>{
         }, true, HookType::KeyboardMouse)?
     };
 
-    let handle = create_window("Dummy Window");//window.handle.hwnd().unwrap();//unsafe{GetConsoleWindow()};
-    //let timer = unsafe {SetTimer(handle, 1, 1000, None) };
-    //println!("{:?} {:?}", timer, handle);
+    let app = InputShareApp::build_ui(Default::default()).expect("Failed to build UI");
+    app.set_status(StatusText::NotConnected);
 
-    const SOCKET: u32 = WM_USER + 1;
 
     let socket = UdpSocket::bind(Endpoint::remote_any())?;
-    socket.notify(handle, SOCKET, NetworkEvents::Read)?;
+    socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
 
     let mut socket = Client::new(socket, IDENTIFIER);
     println!("Running on {}", socket.local_addr()?);
-    let server = "raspberrypi.local:12345"
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
-        .next()
-        .ok_or(Error::new(ErrorKind::AddrNotAvailable, "Could not find suitable address!"))?;
-    println!("Connecting to {}", server);
-    socket.connect(server)?;
 
     let mut last_send = Instant::now();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
         wait_message_timeout(Some(Duration::from_millis(100)))?;
-        while let Some(msg) = get_message() {
+        while let Some(mut msg) = get_message() {
             unsafe {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+                if IsDialogMessageW(GetAncestor(msg.hwnd, GA_ROOT), &mut msg) == 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
             }
             match msg.message {
-                WM_QUIT => {
+                WM_QUIT => break 'outer,
+                TOGGLED => {
+                    match msg.wParam {
+                        0 => app.set_status(StatusText::Remote),
+                        1 => app.set_status(StatusText::Local),
+                        _ => {}
+                    }
+                }
+                CONNECT => {
+                    if !socket.is_connected() {
+                        match server.to_socket_addrs() {
+                            Ok(addrs) => match addrs.filter(|x| x.is_ipv4()).next() {
+                                Some(addrs) => {
+                                    socket.connect(addrs)?;
+                                    app.connect_button.set_text("Connecting...");
+                                    app.connect_button.set_enabled(false);
+                                },
+                                None => {
+                                    nwg::error_message("Error", "Could not find address");
+                                }
+                            }
+                            Err(e) => {
+                                nwg::error_message("Error", &format!("{}", e));
+                            },
+                        }
+                    }
                     if socket.is_connected() {
                         socket.disconnect()?;
-                    } else {
-                        break 'outer
+                        app.connect_button.set_text("Disconnecting...");
+                        app.connect_button.set_enabled(false);
                     }
-
-                },
-                //SOCKET => {
+                }
+                //SOCKET => println!("dfgd"),
                 //    println!("FINALLY");
                 //    let mut buf = [0u8; 1000];
                 //    loop {
@@ -190,11 +212,19 @@ fn main() -> Result<()>{
                 ClientEvent::Connected(id) => {
                     println!("Connected as {}", id);
                     *(*input_events).borrow_mut() = Some(InputSender::new());
+                    app.connect_button.set_text("Disconnect");
+                    app.connect_button.set_enabled(true);
+                    app.set_status(StatusText::Local);
                 },
                 ClientEvent::Disconnected(reason) => {
                     println!("Disconnected: {:?}", reason);
                     *(*input_events).borrow_mut() = None;
-                    break 'outer
+                    if !matches!(reason, ClientDisconnectReason::Disconnected) {
+                        nwg::simple_message("Disconnected", &format!("Disconnected: {:?}", reason));
+                    }
+                    app.connect_button.set_text("Connect");
+                    app.connect_button.set_enabled(true);
+                    app.set_status(StatusText::NotConnected);
                 },
                 ClientEvent::PacketReceived(latest, payload) => {
                     if latest {
@@ -209,16 +239,20 @@ fn main() -> Result<()>{
                 }
             }
         }
-
-
+//
+//
         if let Some(sender) = (*input_events).borrow_mut().as_mut() {
             if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
-                let i = socket.send(sender.write_packet()?)?;
+                let _ = socket.send(sender.write_packet()?)?;
                 last_send = Instant::now();
                 //println!("sending {}", i);
             }
         }
 
+    }
+
+    if socket.is_connected() {
+        socket.disconnect()?;
     }
 
     println!("Shutdown");
@@ -228,3 +262,70 @@ fn main() -> Result<()>{
     Ok(())
 }
 
+#[derive(Default, NwgUi)]
+pub struct InputShareApp {
+    #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE")]
+    #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
+    window: nwg::Window,
+
+    #[nwg_control(text: "Not Connected", size: (280, 45), position: (10, 10), flags: "VISIBLE|DISABLED")]
+    name_edit: nwg::RichLabel,
+
+    #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
+    #[nwg_events( OnButtonClick: [InputShareApp::connect] )]
+    connect_button: nwg::Button
+
+}
+
+#[derive(Debug, Copy, Clone)]
+enum StatusText {
+    Local,
+    Remote,
+    NotConnected
+}
+
+impl StatusText {
+
+    fn text(self) -> &'static str{
+        match self {
+            StatusText::Local => "Local",
+            StatusText::Remote => "Remote",
+            StatusText::NotConnected => "Not Connected",
+        }
+    }
+
+    fn color(self) -> [u8; 3] {
+        match self {
+            StatusText::Local => [60, 140, 255],
+            StatusText::Remote => [255, 80, 100],
+            StatusText::NotConnected => [150, 150, 150],
+        }
+    }
+
+}
+
+impl InputShareApp {
+
+    fn connect(&self) {
+        //nwg::simple_message("Hello", &format!("Hello {}", self.name_edit.text()));
+        unsafe {
+            PostMessageW(null_mut(), CONNECT, 0, 0);
+        }
+    }
+
+    fn set_status(&self, status: StatusText) {
+        self.name_edit.set_text(status.text());
+        self.name_edit.set_para_format(0..100,&nwg::ParaFormat {
+            alignment: Some(nwg::ParaAlignment::Center),
+            ..Default::default()
+        });
+        self.name_edit.set_char_format(0..100, &nwg::CharFormat {
+            height: Some(500),
+            effects: Some(CharEffects::BOLD),
+            text_color: Some(status.color()),
+            //font_face_name: Some("Comic Sans MS".to_string()),
+            ..Default::default()
+        });
+    }
+
+}
