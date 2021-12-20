@@ -21,7 +21,6 @@ build = "build.rs"
 # yawi = { path = "../yawi", features = ["serde"] }
 
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "windef", "minwindef", "basetsd", "processthreadsapi", "errhandlingapi", "winsock2", "wincon"] }
-ctrlc = "3.2"
 byteorder = "1"
 anyhow = "1.0"
 native-windows-gui = "1.0"

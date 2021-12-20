@@ -14,8 +14,7 @@ use anyhow::Result;
 use native_windows_derive::NwgUi;
 use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
-use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
+use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
@@ -33,14 +32,6 @@ fn main() -> Result<()>{
 
 
     let server = "raspberrypi.local:12345";
-
-
-    {
-        let thread_id = unsafe {GetCurrentThreadId()};
-        ctrlc::set_handler(move || {
-            unsafe {PostThreadMessageW(thread_id, WM_QUIT, 0 ,0)};
-        })?;
-    }
 
     let input_events:Rc<RefCell<Option<InputSender>>> = Rc::new(RefCell::new(None));
 
