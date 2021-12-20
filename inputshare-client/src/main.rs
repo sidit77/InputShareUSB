@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use anyhow::Result;
 use native_windows_derive::NwgUi;
-use native_windows_gui::{CharEffects, NativeUi};
+use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
@@ -176,11 +176,11 @@ fn main() -> Result<()>{
                                     app.connect_button.set_enabled(false);
                                 },
                                 None => {
-                                    nwg::error_message("Error", "Could not find address");
+                                    app.show_error("Could not find address");
                                 }
                             }
                             Err(e) => {
-                                nwg::error_message("Error", &format!("{}", e));
+                                app.show_error(&format!("{}", e));
                             },
                         }
                     }
@@ -220,7 +220,7 @@ fn main() -> Result<()>{
                     println!("Disconnected: {:?}", reason);
                     *(*input_events).borrow_mut() = None;
                     if !matches!(reason, ClientDisconnectReason::Disconnected) {
-                        nwg::simple_message("Disconnected", &format!("Disconnected: {:?}", reason));
+                        app.show_error(&format!("Disconnected: {:?}", reason));
                     }
                     app.connect_button.set_text("Connect");
                     app.connect_button.set_enabled(true);
@@ -325,6 +325,15 @@ impl InputShareApp {
             text_color: Some(status.color()),
             //font_face_name: Some("Comic Sans MS".to_string()),
             ..Default::default()
+        });
+    }
+
+    fn show_error(&self, msg: &str) {
+        nwg::modal_message(&self.window, &MessageParams {
+            title: "Error",
+            content: msg,
+            buttons: MessageButtons::Ok,
+            icons: MessageIcons::Error
         });
     }
 
