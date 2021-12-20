@@ -5,8 +5,9 @@ mod windows;
 mod conversions;
 
 use native_windows_gui as nwg;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::net::{ToSocketAddrs, UdpSocket};
+use std::ops::Deref;
 use std::ptr::null_mut;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -33,103 +34,10 @@ fn main() -> Result<()>{
 
     let server = "raspberrypi.local:12345";
 
-    let input_events:Rc<RefCell<Option<InputSender>>> = Rc::new(RefCell::new(None));
-
-    let hook = {
-        let input_events = input_events.clone();
-        let mut old_mouse_pos = unsafe {
-            let mut point = std::mem::zeroed();
-            GetCursorPos(&mut point);
-            (point.x, point.y)
-        };
-
-        let mut captured = false;
-        let hotkey = VirtualKey::Apps;
-        let mut pressed_keys = Vec::new();
-
-        InputHook::new(move |event|{
-            let should_handle = match event.to_key_event() {
-                Some(event) => match (pressed_keys.contains(&event.key), event.state) {
-                    (false, KeyState::Pressed) => {
-                        pressed_keys.push(event.key);
-                        true
-                    },
-                    (true, KeyState::Released) => {
-                        pressed_keys.retain(|k| *k != event.key);
-                        true
-                    },
-                    _ => false
-                }
-                None => true
-            };
-
-            if !captured {
-                if let InputEvent::MouseMoveEvent(x, y) = event {
-                    old_mouse_pos = (x,y);
-                }
-            }
-
-            if let Some(sender) = (*input_events).borrow_mut().as_mut(){
-                if should_handle {
-                    match event.to_key_event() {
-                        Some(event) if event.key == hotkey => {
-                            if event.state == KeyState::Pressed {
-                                captured = !captured;
-                                unsafe {
-                                    PostMessageW(null_mut(), TOGGLED, if captured { 0 } else { 1 }, 0);
-                                }
-                                //println!("Input captured: {}", captured);
-                            }
-                            return false
-                        }
-                        _ => {}
-                    }
-                    if captured {
-                        match event {
-                            InputEvent::MouseMoveEvent(x, y) => {
-                                let (ox, oy) = old_mouse_pos;
-                                sender.move_mouse((x - ox) as i64, (y - oy) as i64);
-                                //old_mouse_pos = Some((x,y))
-                            }
-                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match vk_to_mod(vk) {
-                                Some(modifier) => match ks {
-                                    KeyState::Pressed => sender.press_modifier(modifier),
-                                    KeyState::Released => sender.release_modifier(modifier)
-                                }
-                                None => match wsc_to_hkc(sc) {
-                                    Some(key) => match ks {
-                                        KeyState::Pressed => sender.press_key(key),
-                                        KeyState::Released => sender.release_key(key)
-                                    },
-                                    None => println!("Unknown key: {}", vk)
-                                }
-                            }
-                            InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
-                                Some(button) => match ks {
-                                    KeyState::Pressed => sender.press_mouse_button(button),
-                                    KeyState::Released => sender.release_mouse_button(button)
-                                },
-                                None => println!("Unknown mouse button: {}", mb)
-                            }
-                            InputEvent::MouseWheelEvent(sd) => match sd {
-                                ScrollDirection::Horizontal(amount) => sender.scroll_horizontal(f32_to_i8(amount)),
-                                ScrollDirection::Vertical(amount) => sender.scroll_vertical(f32_to_i8(amount))
-                            }
-                        }
-                    }
-                }
-
-                !captured
-            } else {
-                captured = false;
-                true
-            }
-        }, true, HookType::KeyboardMouse)?
-    };
+    let mut input_transmitter = None;
 
     let app = InputShareApp::build_ui(Default::default()).expect("Failed to build UI");
     app.set_status(StatusText::NotConnected);
-
 
     let socket = UdpSocket::bind(Endpoint::remote_any())?;
     socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
@@ -202,14 +110,14 @@ fn main() -> Result<()>{
             match event {
                 ClientEvent::Connected(id) => {
                     println!("Connected as {}", id);
-                    *(*input_events).borrow_mut() = Some(InputSender::new());
+                    input_transmitter = Some(InputTransmitter::new()?);
                     app.connect_button.set_text("Disconnect");
                     app.connect_button.set_enabled(true);
                     app.set_status(StatusText::Local);
                 },
                 ClientEvent::Disconnected(reason) => {
                     println!("Disconnected: {:?}", reason);
-                    *(*input_events).borrow_mut() = None;
+                    input_transmitter = None;
                     if !matches!(reason, ClientDisconnectReason::Disconnected) {
                         app.show_error(&format!("Disconnected: {:?}", reason));
                     }
@@ -219,8 +127,8 @@ fn main() -> Result<()>{
                 },
                 ClientEvent::PacketReceived(latest, payload) => {
                     if latest {
-                        if let Some(sender) = (*input_events).borrow_mut().as_mut() {
-                            sender.read_packet(payload)?;
+                        if let Some(ref mut transmitter) = input_transmitter {
+                            transmitter.sender().read_packet(payload)?;
                         }
                     }
                     //println!("Packet {:?}", payload);
@@ -232,7 +140,7 @@ fn main() -> Result<()>{
         }
 //
 //
-        if let Some(sender) = (*input_events).borrow_mut().as_mut() {
+        if let Some(mut sender) = input_transmitter.as_mut().map(|t|t.sender()) {
             if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
                 let _ = socket.send(sender.write_packet()?)?;
                 last_send = Instant::now();
@@ -248,10 +156,116 @@ fn main() -> Result<()>{
 
     println!("Shutdown");
 
-    hook.remove();
-
     Ok(())
 }
+
+struct InputTransmitter<'a> {
+    _hook: InputHook<'a>,
+    sender: Rc<RefCell<InputSender>>
+}
+
+impl<'a> InputTransmitter<'a> {
+
+    fn new() -> Result<Self> {
+        let sender = Rc::new(RefCell::new(InputSender::new()));
+        let hook = {
+            let input_events = sender.clone();
+            let mut old_mouse_pos = unsafe {
+                let mut point = std::mem::zeroed();
+                GetCursorPos(&mut point);
+                (point.x, point.y)
+            };
+
+            let mut captured = false;
+            let hotkey = VirtualKey::Apps;
+            let mut pressed_keys = Vec::new();
+
+            InputHook::new(move |event|{
+                let should_handle = match event.to_key_event() {
+                    Some(event) => match (pressed_keys.contains(&event.key), event.state) {
+                        (false, KeyState::Pressed) => {
+                            pressed_keys.push(event.key);
+                            true
+                        },
+                        (true, KeyState::Released) => {
+                            pressed_keys.retain(|k| *k != event.key);
+                            true
+                        },
+                        _ => false
+                    }
+                    None => true
+                };
+
+
+                if should_handle {
+                    match event.to_key_event() {
+                        Some(event) if event.key == hotkey => {
+                            if event.state == KeyState::Pressed {
+                                captured = !captured;
+                                unsafe {
+                                    PostMessageW(null_mut(), TOGGLED, if captured { 0 } else { 1 }, 0);
+                                }
+                                //println!("Input captured: {}", captured);
+                            }
+                            return false
+                        }
+                        _ => {}
+                    }
+                    if captured {
+                        let mut sender = input_events.deref().borrow_mut();
+                        match event {
+                            InputEvent::MouseMoveEvent(x, y) => {
+                                let (ox, oy) = old_mouse_pos;
+                                sender.move_mouse((x - ox) as i64, (y - oy) as i64);
+                                //old_mouse_pos = Some((x,y))
+                            }
+                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match vk_to_mod(vk) {
+                                Some(modifier) => match ks {
+                                    KeyState::Pressed => sender.press_modifier(modifier),
+                                    KeyState::Released => sender.release_modifier(modifier)
+                                }
+                                None => match wsc_to_hkc(sc) {
+                                    Some(key) => match ks {
+                                        KeyState::Pressed => sender.press_key(key),
+                                        KeyState::Released => sender.release_key(key)
+                                    },
+                                    None => println!("Unknown key: {}", vk)
+                                }
+                            }
+                            InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
+                                Some(button) => match ks {
+                                    KeyState::Pressed => sender.press_mouse_button(button),
+                                    KeyState::Released => sender.release_mouse_button(button)
+                                },
+                                None => println!("Unknown mouse button: {}", mb)
+                            }
+                            InputEvent::MouseWheelEvent(sd) => match sd {
+                                ScrollDirection::Horizontal(amount) => sender.scroll_horizontal(f32_to_i8(amount)),
+                                ScrollDirection::Vertical(amount) => sender.scroll_vertical(f32_to_i8(amount))
+                            }
+                        }
+                    } else {
+                        if let InputEvent::MouseMoveEvent(x, y) = event {
+                            old_mouse_pos = (x,y);
+                        }
+                    }
+                }
+
+                !captured
+            }, true, HookType::KeyboardMouse)?
+        };
+        Ok(Self {
+            _hook: hook,
+            sender
+        })
+    }
+
+    fn sender(&mut self) -> RefMut<'_, InputSender> {
+        self.sender.deref().borrow_mut()
+    }
+
+}
+
 
 #[derive(Default, NwgUi)]
 pub struct InputShareApp {
