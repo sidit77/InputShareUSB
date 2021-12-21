@@ -26,6 +26,8 @@ This program needs an external piece of hardware that has some form of network a
 
 ### Raspberry Pi
 
+**Outdated** 
+
 Connect your Raspberry Pi to your second device used the data USB port
 
 Clone repository:
