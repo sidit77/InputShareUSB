@@ -8,6 +8,7 @@ use std::net::{SocketAddr};
 use std::time::Duration;
 use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
+use clap::Parser;
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{Endpoint, MAX_PACKET_SIZE, Server, ServerEvent, Transport};
@@ -15,17 +16,32 @@ use vec_map::VecMap;
 use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
+/// The server for inputshare
+#[derive(Parser, Debug)]
+#[clap(about, version, author)]
+struct Args {
+    /// When set automatically moves the mouse every x seconds without input
+    #[clap(short, long)]
+    idle_timeout: Option<u64>,
+
+    /// The port that should be used
+    #[clap(short, long, default_value_t = 60067)]
+    port: u16,
+}
+
 fn main() -> Result<()>{
+    let args = Args::parse();
+
     configfs::enable_hid()?;
 
-    let result = server();
+    let result = server(args);
 
     configfs::disable_hid()?;
 
     result
 }
 
-fn server() -> Result<()> {
+fn server(args: Args) -> Result<()> {
     println!("Hello World!");
 
     let mut mouse = Mouse::new()?;
@@ -39,7 +55,7 @@ fn server() -> Result<()> {
     let mut signals = Signals::new(SignalSet::all())?;
     poll.registry().register(&mut signals, SIGNAL, Interest::READABLE)?;
 
-    let mut socket = UdpSocket::bind(Endpoint::remote_port(12345))?;
+    let mut socket = UdpSocket::bind(Endpoint::remote_port(args.port))?;
     poll.registry().register(&mut socket, SERVER, Interest::READABLE)?;
     let mut socket = Server::new(MioSocket::from(socket), IDENTIFIER, 1);
 
