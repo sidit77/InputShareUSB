@@ -1,5 +1,22 @@
 # Input Share USB
 
+## Road to 2.0
+* Client
+- [ ] adaptive sleep duration
+- [ ] limit update rate
+- [ ] show ping / packet loss
+- [ ] client error management
+- [ ] new icon?
+* Yawi
+- [ ] use `std::io::Error`
+- [ ] use `threadlocal` for `InputHook`
+- [ ] use `num_enum` for `VirtualKey`
+* General
+- [ ] CI Pipeline
+- [ ] Update readme
+- [ ] Cleanup old install scripts
+
+
 ## Overview
 
 This program can share your mouse and keyboard with a second device. 
