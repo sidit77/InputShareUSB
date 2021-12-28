@@ -32,7 +32,7 @@ fn main() -> Result<()>{
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
 
-    let server = "raspberrypi.local:12345";
+    let server = "raspberrypi.local:60067";
 
     let mut input_transmitter = None;
 

@@ -5,7 +5,7 @@ use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::net::{SocketAddr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
 use clap::Parser;
@@ -42,7 +42,7 @@ fn main() -> Result<()>{
 }
 
 fn server(args: Args) -> Result<()> {
-    println!("Hello World!");
+    println!("Opening HID devices");
 
     let mut mouse = Mouse::new()?;
     let mut keyboard = Keyboard::new()?;
@@ -59,13 +59,33 @@ fn server(args: Args) -> Result<()> {
     poll.registry().register(&mut socket, SERVER, Interest::READABLE)?;
     let mut socket = Server::new(MioSocket::from(socket), IDENTIFIER, 1);
 
-    println!("running on {}", socket.local_addr()?);
+    println!("Started server on {}", socket.local_addr()?);
 
+    let mut last_input = Instant::now();
+    let mut idle_move_x = -10;
     let mut receivers = VecMap::new();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
-        poll.poll(&mut events, Some(Duration::from_secs(1)))?;
+        let mut timeout = match receivers.is_empty() {
+            true => None,
+            false => Some(Duration::from_millis(550))
+        };
+        if let Some(secs) = args.idle_timeout {
+            let mut remaining = (last_input + Duration::from_secs(secs)).saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                mouse.move_by(idle_move_x, 0)?;
+                idle_move_x *= -1;
+                last_input = Instant::now();
+                remaining = Duration::from_secs(secs);
+            }
+            timeout = match timeout {
+                None => Some(remaining),
+                Some(timout) => Some(timout.min(remaining))
+            };
+            timeout = timeout.map(|t|Duration::min(t, remaining)).or(Some(remaining))
+        }
 
+        poll.poll(&mut events, timeout)?;
 
         for event in events.iter() {
             match event.token() {
@@ -83,22 +103,24 @@ fn server(args: Args) -> Result<()> {
         }
 
         socket.update();
-        while let Some(event) = socket.next_event(&mut buffer).unwrap() {
-            match event {
-                ServerEvent::ClientConnected(client_id) => {
-                    println!("Client {} connected", client_id);
-                    receivers.insert(client_id.into(), InputReceiver::new());
-                },
-                ServerEvent::ClientDisconnected(client_id, reason) => {
-                    println!("Client {} disconnected: {:?}", client_id, reason);
-                    mouse.reset()?;
-                    keyboard.reset()?;
-                    receivers.remove(client_id.into());
-                },
-                ServerEvent::PacketReceived(client_id, latest, payload) => {
-                    if latest {
+        loop {
+            match socket.next_event(&mut buffer) {
+                Ok(Some(event)) => match event {
+                    ServerEvent::ClientConnected(client_id) => {
+                        println!("Client {} connected", client_id);
+                        receivers.insert(client_id.into(), InputReceiver::new());
+                    },
+                    ServerEvent::ClientDisconnected(client_id, reason) => {
+                        println!("Client {} disconnected: {:?}", client_id, reason);
+                        mouse.reset()?;
+                        keyboard.reset()?;
+                        receivers.remove(client_id.into());
+                    },
+                    ServerEvent::PacketReceived(client_id, latest, payload) => if latest {
                         if let Some(receiver) = receivers.get_mut(client_id.into()) {
-                            socket.send(client_id, receiver.process_packet(payload)?)?;
+                            if let Ok(packet) = receiver.process_packet(payload) {
+                                socket.send(client_id, packet).unwrap_or_default();
+                            }
                             while let Some(event) = receiver.get_event() {
                                 match event {
                                     InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16)?,
@@ -115,13 +137,19 @@ fn server(args: Args) -> Result<()> {
                                         mouse.reset()?;
                                     }
                                 }
+                                last_input = Instant::now();
                                 //println!("{:?}", event);
                             }
                         }
 
-                    }
-                },
-                _ => {}
+                    },
+                    _ => {}
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    println!("Receive error: {}", e);
+                    break;
+                }
             }
         }
 
