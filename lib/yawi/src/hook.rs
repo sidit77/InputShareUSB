@@ -5,7 +5,7 @@ use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT, UINT};
 use std::os::raw;
 use std::ptr::{null};
 use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 use std::io::{Error, ErrorKind, Result};
 
@@ -217,7 +217,7 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
 }
 
 fn parse_virtual_key(key_struct: &KBDLLHOOKSTRUCT) -> Option<VirtualKey> {
-    key_struct.vkCode.try_into().ok()
+    key_struct.vkCode.try_into().ok().map(|vk:u8|VirtualKey::try_from(vk).ok()).flatten()
 }
 
 fn parse_key_state(wparam: WPARAM) -> Option<KeyState> {

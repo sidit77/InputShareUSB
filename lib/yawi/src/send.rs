@@ -10,7 +10,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
     match input {
         Input::KeyboardKeyInput(key, state) =>  {
             vec.push(create_keyboard_input(KEYBDINPUT{
-                wVk: key.clone().into(),
+                wVk: u8::from(*key).into(),
                 wScan: 0,
                 dwFlags: match state {
                     KeyState::Pressed => 0,

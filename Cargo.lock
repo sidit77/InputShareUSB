@@ -672,6 +672,7 @@ dependencies = [
 name = "yawi"
 version = "0.1.0"
 dependencies = [
+ "num_enum",
  "serde",
  "winapi",
 ]

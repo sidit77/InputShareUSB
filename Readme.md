@@ -10,7 +10,7 @@
 * Yawi
 - [x] use `std::io::Error`
 - [ ] use `threadlocal` for `InputHook`
-- [ ] use `num_enum` for `VirtualKey`
+- [x] use `num_enum` for `VirtualKey`
 * General
 - [ ] CI Pipeline
 - [ ] Update readme

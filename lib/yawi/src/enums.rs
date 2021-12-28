@@ -1,6 +1,6 @@
-use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter};
 use std::fmt;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 
 pub type WindowsScanCode = u16;
@@ -98,7 +98,7 @@ pub enum KeyState {
 /// Windows virtual key code.
 ///
 /// See [Virtual-Key Codes](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx) for more information.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, TryFromPrimitive, IntoPrimitive)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum VirtualKey {
@@ -338,76 +338,9 @@ impl VirtualKey {
 
 }
 
-//#[cfg(feature = "serde")]
-//impl Serialize for VirtualKey {
-//    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error> where S: Serializer {
-//        todo!()
-//    }
-//}
-
 impl Display for VirtualKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 
         write!(f, "{}", format!("{:?}", self).trim_start_matches("Key"))
-    }
-}
-
-const INVALID_KEYS: [u8; 60] = [
-    0x07, 0x0A, 0x0B, 0x0E, 0x0F, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x5E, 0x88, 0x89,
-    0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0x9D, 0x9E, 0x9F,
-    0xB8, 0xB9, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD,
-    0xCE, 0xCF, 0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE0, 0xE8
-];
-
-impl TryFrom<u8> for VirtualKey {
-    type Error = &'static str;
-    fn try_from(id: u8) -> Result<Self, Self::Error> {
-        if INVALID_KEYS.contains(&id) {
-            Err("Invalid key code!")
-        } else {
-            unsafe {
-                Ok(*(&id as *const u8 as *const VirtualKey))
-            }
-        }
-    }
-}
-
-impl TryFrom<u16> for VirtualKey {
-    type Error = &'static str;
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
-        match TryInto::<u8>::try_into(value).ok() {
-            None => Err("Invalid key code!"),
-            Some(i) => TryInto::<VirtualKey>::try_into(i)
-        }
-    }
-}
-
-impl TryFrom<u32> for VirtualKey {
-    type Error = &'static str;
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match TryInto::<u8>::try_into(value).ok() {
-            None => Err("Invalid key code!"),
-            Some(i) => TryInto::<VirtualKey>::try_into(i)
-        }
-    }
-}
-
-impl From<VirtualKey> for u8 {
-    fn from(key: VirtualKey) -> Self {
-        unsafe {
-            *(&key as *const VirtualKey as *const u8)
-        }
-    }
-}
-
-impl From<VirtualKey> for u16 {
-    fn from(key: VirtualKey) -> Self {
-        Into::<u8>::into(key).into()
-    }
-}
-
-impl From<VirtualKey> for u32 {
-    fn from(key: VirtualKey) -> Self {
-        Into::<u8>::into(key).into()
     }
 }
