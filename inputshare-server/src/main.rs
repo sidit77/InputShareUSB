@@ -15,6 +15,10 @@ use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
 fn main() -> Result<()>{
+   server()
+}
+
+fn server() -> Result<()> {
     println!("Hello World!");
 
     let mut mouse = Mouse::new()?;
@@ -55,7 +59,7 @@ fn main() -> Result<()>{
             }
         }
 
-        socket.update()?;
+        socket.update();
         while let Some(event) = socket.next_event(&mut buffer).unwrap() {
             match event {
                 ServerEvent::ClientConnected(client_id) => {
@@ -94,19 +98,22 @@ fn main() -> Result<()>{
 
                     }
                 },
-                ServerEvent::PacketAcknowledged(_, _) => {
-                    //println!("Packet {} acknowledged for {}", seq, client_id)
-                }
+                _ => {}
             }
         }
 
     }
 
-    socket.disconnect_all()?;
+    mouse.reset()?;
+    keyboard.reset()?;
+
+    for client in socket.connected_clients().collect::<Vec<_>>() {
+        socket.disconnect(client).unwrap();
+    }
+
     println!("Shutting down");
 
     Ok(())
-
 }
 
 struct MioSocket(UdpSocket);

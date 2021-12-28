@@ -70,7 +70,7 @@ fn main() -> Result<()>{
                         match server.to_socket_addrs() {
                             Ok(addrs) => match addrs.filter(|x| x.is_ipv4()).next() {
                                 Some(addrs) => {
-                                    socket.connect(addrs)?;
+                                    socket.connect(addrs);
                                     app.connect_button.set_text("Connecting...");
                                     app.connect_button.set_enabled(false);
                                 },
@@ -105,7 +105,7 @@ fn main() -> Result<()>{
             }
         }
 
-        socket.update().unwrap();
+        socket.update();
         while let Some(event) = socket.next_event(&mut buffer).unwrap() {
             match event {
                 ClientEvent::Connected(id) => {
@@ -133,9 +133,7 @@ fn main() -> Result<()>{
                     }
                     //println!("Packet {:?}", payload);
                 },
-                ClientEvent::PacketAcknowledged(_) => {
-                    //println!("{} got acknowledged", seq);
-                }
+                _ => {}
             }
         }
 //
