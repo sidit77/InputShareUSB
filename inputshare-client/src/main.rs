@@ -6,11 +6,16 @@ mod conversions;
 
 use native_windows_gui as nwg;
 use std::cell::{RefCell, RefMut};
+use std::collections::HashSet;
+use std::fs;
+use std::io::ErrorKind;
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::ops::Deref;
+use std::path::Path;
 use std::ptr::null_mut;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use native_windows_derive::NwgUi;
 use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
@@ -28,11 +33,10 @@ const CONNECT: u32 = WM_USER + 2;
 const TOGGLED: u32 = WM_USER + 3;
 
 fn main() -> Result<()>{
+    let config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
+
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
-
-
-    let server = "raspberrypi.local:60067";
 
     let mut input_transmitter = None;
 
@@ -67,7 +71,7 @@ fn main() -> Result<()>{
                 }
                 CONNECT => {
                     if !socket.is_connected() {
-                        match server.to_socket_addrs() {
+                        match config.host_address.to_socket_addrs() {
                             Ok(addrs) => match addrs.filter(|x| x.is_ipv4()).next() {
                                 Some(addrs) => {
                                     socket.connect(addrs);
@@ -110,7 +114,7 @@ fn main() -> Result<()>{
             match event {
                 ClientEvent::Connected(id) => {
                     println!("Connected as {}", id);
-                    input_transmitter = Some(InputTransmitter::new()?);
+                    input_transmitter = Some(InputTransmitter::new(&config.hotkey, &config.backlist)?);
                     app.connect_button.set_text("Disconnect");
                     app.connect_button.set_enabled(true);
                     app.set_status(StatusText::Local);
@@ -164,7 +168,7 @@ struct InputTransmitter<'a> {
 
 impl<'a> InputTransmitter<'a> {
 
-    fn new() -> Result<Self> {
+    fn new(hotkey: &Hotkey, blacklist: &HashSet<VirtualKey>) -> Result<Self> {
         let sender = Rc::new(RefCell::new(InputSender::new()));
         let hook = {
             let input_events = sender.clone();
@@ -174,19 +178,27 @@ impl<'a> InputTransmitter<'a> {
                 (point.x, point.y)
             };
 
+            let blacklist = blacklist.clone();
+
             let mut captured = false;
-            let hotkey = VirtualKey::Apps;
-            let mut pressed_keys = Vec::new();
+            let hotkey = hotkey.clone();
+            let mut pressed_keys = HashSet::new();
 
             InputHook::new(move |event|{
+                if let Some(event) = event.to_key_event() {
+                    if blacklist.contains(&event.key){
+                        return true;
+                    }
+                }
+
                 let should_handle = match event.to_key_event() {
                     Some(event) => match (pressed_keys.contains(&event.key), event.state) {
                         (false, KeyState::Pressed) => {
-                            pressed_keys.push(event.key);
+                            pressed_keys.insert(event.key);
                             true
                         },
                         (true, KeyState::Released) => {
-                            pressed_keys.retain(|k| *k != event.key);
+                            pressed_keys.remove(&event.key);
                             true
                         },
                         _ => false
@@ -197,8 +209,8 @@ impl<'a> InputTransmitter<'a> {
 
                 if should_handle {
                     match event.to_key_event() {
-                        Some(event) if event.key == hotkey => {
-                            if event.state == KeyState::Pressed {
+                        Some(event) if event.key == hotkey.trigger => {
+                            if event.state == KeyState::Pressed && pressed_keys.is_superset(&hotkey.modifiers) {
                                 captured = !captured;
                                 unsafe {
                                     PostMessageW(null_mut(), TOGGLED, if captured { 0 } else { 1 }, 0);
@@ -338,6 +350,68 @@ impl InputShareApp {
             buttons: MessageButtons::Ok,
             icons: MessageIcons::Error
         });
+    }
+
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Hotkey {
+    pub modifiers: HashSet<VirtualKey>,
+    pub trigger: VirtualKey
+}
+
+impl<const N: usize> From<[VirtualKey; N]> for Hotkey {
+    fn from(values: [VirtualKey; N]) -> Self {
+        let trigger = *values.last().expect("hotkey must not be empty!");
+        let mut modifiers = HashSet::from(values);
+        modifiers.remove(&trigger);
+
+        Self {
+            modifiers,
+            trigger
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub host_address: String,
+    pub hotkey: Hotkey,
+    pub backlist: HashSet<VirtualKey>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            host_address: String::from("raspberrypi.local:60067"),
+            hotkey: Hotkey::from([VirtualKey::Apps]),
+            backlist: HashSet::from([
+                VirtualKey::VolumeDown,
+                VirtualKey::VolumeUp,
+                VirtualKey::VolumeMute,
+                VirtualKey::MediaStop,
+                VirtualKey::MediaPrevTrack,
+                VirtualKey::MediaPlayPause,
+                VirtualKey::MediaNextTrack
+            ])
+        }
+    }
+}
+
+impl Config {
+
+    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        match fs::read_to_string(&path) {
+            Ok(cfg) => Ok(serde_json::from_str(&cfg)?),
+            Err(ref e) if e.kind() == ErrorKind::NotFound => {
+                if let Some(parent) = path.as_ref().parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(path, serde_json::to_string_pretty(&Self::default())?)?;
+                Ok(Self::default())
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 
 }

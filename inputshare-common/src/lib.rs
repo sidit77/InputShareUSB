@@ -5,8 +5,6 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-pub const DEFAULT_PORT: u16 = 60067;
-
 pub const IDENTIFIER: &str = "inputshare-usb";
 
 #[derive(Debug, Copy, Clone, PartialEq)]
