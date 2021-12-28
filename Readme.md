@@ -7,10 +7,6 @@
 - [ ] show ping / packet loss
 - [ ] client error management
 - [ ] new icon?
-* Yawi
-- [x] use `std::io::Error`
-- [ ] use `threadlocal` for `InputHook`
-- [x] use `num_enum` for `VirtualKey`
 * General
 - [ ] CI Pipeline
 - [ ] Update readme
