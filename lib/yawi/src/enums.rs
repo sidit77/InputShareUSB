@@ -330,6 +330,14 @@ pub enum VirtualKey {
     OemClear                     = 0xFE
 }
 
+impl VirtualKey {
+
+    pub fn is_mouse_button(self) -> bool {
+        matches!(self, VirtualKey::LButton | VirtualKey::MButton | VirtualKey::RButton | VirtualKey::XButton1 | VirtualKey::XButton2)
+    }
+
+}
+
 //#[cfg(feature = "serde")]
 //impl Serialize for VirtualKey {
 //    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error> where S: Serializer {

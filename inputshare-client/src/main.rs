@@ -23,7 +23,7 @@ use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX
 use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
-use yawi::{HookType, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
+use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hkc};
 use crate::sender::InputSender;
 use crate::windows::{get_message, wait_message_timeout};
@@ -221,6 +221,14 @@ impl<'a> InputTransmitter<'a> {
                     match event.to_key_event() {
                         Some(event) if event.key == hotkey.trigger => {
                             if event.state == KeyState::Pressed && pressed_keys.is_superset(&hotkey.modifiers) {
+                                if captured {
+                                    input_events.deref().borrow_mut().reset();
+                                } else {
+                                    send_inputs(pressed_keys.iter().copied().map(|k| match k.is_mouse_button() {
+                                        true => Input::MouseButtonInput(k, KeyState::Released),
+                                        false => Input::KeyboardKeyInput(k, KeyState::Released),
+                                    })).unwrap_or_else(|e| println!("{}", e));
+                                }
                                 captured = !captured;
                                 unsafe {
                                     PostMessageW(null_mut(), TOGGLED, if captured { 0 } else { 1 }, 0);

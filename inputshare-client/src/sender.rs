@@ -31,6 +31,10 @@ impl InputSender {
         self.local_mouse_pos.y += y;
     }
 
+    pub fn reset(&mut self) {
+        self.message_queue.push_back([MessageType::Reset.into(), 0])
+    }
+
     pub fn press_key(&mut self, key: HidKeyCode) {
         self.message_queue.push_back([MessageType::KeyPress.into(), key.into()])
     }
