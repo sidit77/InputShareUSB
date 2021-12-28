@@ -1,4 +1,5 @@
 mod receiver;
+mod configfs;
 
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
@@ -15,7 +16,13 @@ use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
 fn main() -> Result<()>{
-   server()
+    configfs::enable_hid()?;
+
+    let result = server();
+
+    configfs::disable_hid()?;
+
+    result
 }
 
 fn server() -> Result<()> {
