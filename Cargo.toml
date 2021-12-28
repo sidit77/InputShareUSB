@@ -6,3 +6,6 @@ members = [
     "lib/winsock2_extensions",
     "lib/yawi"
 ]
+
+[profile.release]
+lto = true
