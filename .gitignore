@@ -1,4 +1,3 @@
 /target
 /.idea
-/build_and_deploy_server.bat
-/inputshare-gui.toml
+/inputshare-client.json
