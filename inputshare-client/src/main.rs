@@ -33,10 +33,20 @@ const CONNECT: u32 = WM_USER + 2;
 const TOGGLED: u32 = WM_USER + 3;
 
 fn main() -> Result<()>{
-    let config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
-
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
+
+    match client() {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            nwg::error_message("Error", &format!("The following error occured:\n{}", e));
+            Err(e)
+        }
+    }
+}
+
+fn client() -> Result<()> {
+    let config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
 
     let mut input_transmitter = None;
 
