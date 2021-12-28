@@ -1,9 +1,8 @@
 use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, GetSystemMetrics};
 use std::mem;
+use std::io::{Error, Result};
 use crate::{KeyState, Input, VirtualKey, ScrollDirection};
-use crate::error::Error;
 
-const IGNORE: usize = 0x1234567;
 
 
 
@@ -18,7 +17,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                     KeyState::Released => KEYEVENTF_KEYUP
                 },
                 time: 0,
-                dwExtraInfo: IGNORE
+                dwExtraInfo: 0
             }));
         }
         Input::StringInput(string) => {
@@ -28,14 +27,14 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                     wScan: c,
                     dwFlags: KEYEVENTF_UNICODE,
                     time: 0,
-                    dwExtraInfo: IGNORE
+                    dwExtraInfo: 0
                 }));
                 vec.push(create_keyboard_input(KEYBDINPUT{
                     wVk: 0,
                     wScan: c,
                     dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
                     time: 0,
-                    dwExtraInfo: IGNORE
+                    dwExtraInfo: 0
                 }));
             }
         }
@@ -62,7 +61,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                     _ => {println!("Unsupported key ({:?}): Skipping!", key); MOUSEEVENTF_WHEEL}
                 },
                 time: 0,
-                dwExtraInfo: IGNORE
+                dwExtraInfo: 0
             }))
         }
         Input::MouseScrollInput(dir) => {
@@ -78,7 +77,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                     ScrollDirection::Vertical(_) => MOUSEEVENTF_WHEEL
                 },
                 time: 0,
-                dwExtraInfo: IGNORE
+                dwExtraInfo: 0
             }));
         }
         Input::RelativeMouseMoveInput(dx, dy) => {
@@ -88,7 +87,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                 mouseData: 0,
                 dwFlags: MOUSEEVENTF_MOVE,
                 time: 0,
-                dwExtraInfo: IGNORE
+                dwExtraInfo: 0
             }))
         }
         Input::AbsoluteMouseMoveInput(x, y) => {
@@ -98,7 +97,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                 mouseData: 0,
                 dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
                 time: 0,
-                dwExtraInfo: IGNORE
+                dwExtraInfo: 0
             }))
         }
     }
@@ -138,7 +137,7 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
 /// [SendInput](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
 ///
 /// Return Ok if the number of send inputs match the number of supplied inputs
-pub fn send_inputs<'a>(inputs: impl Iterator<Item=Input<'a>>) -> crate::Result<()>{
+pub fn send_inputs<'a>(inputs: impl Iterator<Item=Input<'a>>) -> Result<()>{
     let mut vec = Vec::new();
     for input in inputs {
         add_to_vec(&mut vec, &input);
@@ -146,13 +145,13 @@ pub fn send_inputs<'a>(inputs: impl Iterator<Item=Input<'a>>) -> crate::Result<(
     let c = unsafe {winapi::um::winuser::SendInput(vec.len() as u32, vec.as_mut_ptr(), mem::size_of::<INPUT>() as i32)};
     match vec.len() == c as usize {
         true => Ok(()),
-        false => Err(Error::last())
+        false => Err(Error::last_os_error())
     }
 }
 
 /// Convenience function to send a single input
 ///
 /// See `send_inputs` for more info
-pub fn send_input(input: Input) -> crate::Result<()> {
+pub fn send_input(input: Input) -> Result<()> {
     send_inputs(std::iter::once(input))
 }

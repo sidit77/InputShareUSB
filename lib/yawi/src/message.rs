@@ -1,22 +1,5 @@
-use winapi::um::winuser::{TranslateMessage, DispatchMessageW, MSG, GetMessageW, PostMessageW, WM_QUIT, PostThreadMessageW};
+use winapi::um::winuser::{TranslateMessage, DispatchMessageW, MSG, GetMessageW, PostMessageW, WM_QUIT};
 use std::{mem, ptr};
-use winapi::um::processthreadsapi::GetCurrentThreadId;
-use winapi::shared::minwindef::DWORD;
-
-pub struct Quitter {
-    thread: DWORD
-}
-
-impl Quitter {
-    pub fn from_current_thread() -> Self{
-        Self {
-            thread: unsafe {GetCurrentThreadId()}
-        }
-    }
-    pub fn quit(&self){
-        unsafe {PostThreadMessageW(self.thread, WM_QUIT, 0 ,0)};
-    }
-}
 
 pub fn run() {
     unsafe {

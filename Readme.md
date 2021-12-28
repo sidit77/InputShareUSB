@@ -8,7 +8,7 @@
 - [ ] client error management
 - [ ] new icon?
 * Yawi
-- [ ] use `std::io::Error`
+- [x] use `std::io::Error`
 - [ ] use `threadlocal` for `InputHook`
 - [ ] use `num_enum` for `VirtualKey`
 * General

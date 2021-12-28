@@ -4,10 +4,10 @@ use winapi::shared::windef::HHOOK;
 use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT, UINT};
 use std::os::raw;
 use std::ptr::{null};
-use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent, Error};
+use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use crate::Result;
+use std::io::{Error, ErrorKind, Result};
 
 struct NativeHook {
     keyboard: Option<HHOOK>,
@@ -42,7 +42,7 @@ impl NativeHook {
 
 fn check<T>(ptr: *mut T) -> Result<*mut T>{
     if ptr.is_null() {
-        Err(Error::last())
+        Err(Error::last_os_error())
     } else {
         Ok(ptr)
     }
@@ -108,7 +108,7 @@ impl<'a> InputHook<'a>{
                         std::mem::transmute(callback))?);
                     Ok(Self::default())
                 },
-                Some(_) => Err(Error::SUCCESS)
+                Some(_) => Err(Error::new(ErrorKind::AlreadyExists, "A hook for this thread is already set"))
             }
         }
     }
