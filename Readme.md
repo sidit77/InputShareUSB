@@ -6,7 +6,7 @@
 - [ ] limit update rate
 - [ ] show ping / packet loss
 - [ ] client error management
-- [ ] new icon?
+- [X] new icon?
 * General
 - [ ] CI Pipeline
 - [ ] Update readme
