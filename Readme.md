@@ -5,7 +5,7 @@
 - [x] adaptive sleep duration
 - [x] limit update rate
 - [x] show ping / packet loss
-- [ ] client error management
+- [x] client error management
 - [X] new icon?
 * General
 - [ ] CI Pipeline

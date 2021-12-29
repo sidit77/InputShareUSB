@@ -123,7 +123,7 @@ fn client() -> Result<()> {
 
         if socket_message || last_socket_update.elapsed() > Duration::from_millis(500) {
             socket.update();
-            while let Some(event) = socket.next_event(&mut buffer).unwrap() {
+            while let Some(event) = socket.next_event(&mut buffer)? {
                 match event {
                     ClientEvent::Connected(id) => {
                         println!("Connected as {}", id);
@@ -145,11 +145,10 @@ fn client() -> Result<()> {
                     ClientEvent::PacketReceived(latest, payload) => {
                         if latest {
                             if let Some(ref mut transmitter) = input_transmitter {
-                                transmitter.sender_mut().read_packet(payload)?;
+                                transmitter.sender_mut().read_packet(payload)
+                                    .unwrap_or_else(|e|println!("Packet decode error: {}", e));
                             }
                         }
-
-                        //println!("Packet {:?}", payload);
                     },
                     _ => {}
                 }
