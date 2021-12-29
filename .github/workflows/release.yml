@@ -45,14 +45,14 @@ jobs:
         if: runner.os != 'Windows'
         run: >
           tar -cv
-          LICENSE.md README.md
-          -C target/${{ matrix.target }}/release/${{ matrix.bin }}
+          License.md Readme.md
+          -C target/${{ matrix.target }}/release/ ${{ matrix.bin }}
           | gzip --best > '${{ matrix.bin }}-${{ matrix.target }}.tar.gz'
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: >
           7z a ${{ matrix.bin }}-${{ matrix.target }}.zip
-          LICENSE.md README.md
+          License.md Readme.md
           ./target/${{ matrix.target }}/release/${{ matrix.bin }}.exe
       - name: Upload artifact
         uses: actions/upload-artifact@v2
