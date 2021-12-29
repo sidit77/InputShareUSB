@@ -2,8 +2,8 @@
 
 ## Road to 2.0
 * Client
-- [ ] adaptive sleep duration
-- [ ] limit update rate
+- [x] adaptive sleep duration
+- [x] limit update rate
 - [x] show ping / packet loss
 - [ ] client error management
 - [X] new icon?

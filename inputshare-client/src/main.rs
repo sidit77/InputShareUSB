@@ -5,7 +5,7 @@ mod windows;
 mod conversions;
 
 use native_windows_gui as nwg;
-use std::cell::{RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::convert::TryFrom;
 use std::collections::HashSet;
 use std::fs;
@@ -49,7 +49,7 @@ fn main() -> Result<()>{
 fn client() -> Result<()> {
     let mut config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
 
-    let mut input_transmitter = None;
+    let mut input_transmitter: Option<InputTransmitter> = None;
 
     let app = InputShareApp::build_ui(Default::default()).expect("Failed to build UI");
     app.set_status(StatusText::NotConnected);
@@ -62,10 +62,15 @@ fn client() -> Result<()> {
     println!("Running on {}", socket.local_addr()?);
 
     let mut last_network_label_update = Instant::now();
+    let mut last_socket_update = Instant::now();
     let mut last_send = Instant::now();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
-        wait_message_timeout(Some(Duration::from_millis(100)))?;
+        wait_message_timeout(Some(match input_transmitter {
+            Some(ref transmitter) if !transmitter.sender().in_sync() => Duration::from_secs_f32(1.0 / config.network_send_rate as f32),
+            _ => Duration::from_millis(500)
+        }))?;
+        let mut socket_message = false;
         while let Some(mut msg) = get_message() {
             unsafe {
                 if IsDialogMessageW(GetAncestor(msg.hwnd, GA_ROOT), &mut msg) == 0 {
@@ -109,61 +114,54 @@ fn client() -> Result<()> {
                         app.connect_button.set_text("Disconnecting...");
                         app.connect_button.set_enabled(false);
                     }
+                    socket_message = true;
                 }
-                //SOCKET => println!("dfgd"),
-                //    println!("FINALLY");
-                //    let mut buf = [0u8; 1000];
-                //    loop {
-                //        match socket.recv_from(&mut buf) {
-                //            Ok((size, src)) => println!("Got {:?} from {}", &buf[..size], src),
-                //            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
-                //            Err(e) => Err(e)?
-                //        }
-//
-                //    }
-                //}
+                SOCKET => socket_message = true,
                 _ => {}
             }
         }
 
-        socket.update();
-        while let Some(event) = socket.next_event(&mut buffer).unwrap() {
-            match event {
-                ClientEvent::Connected(id) => {
-                    println!("Connected as {}", id);
-                    input_transmitter = Some(InputTransmitter::new(&config.hotkey, &config.backlist)?);
-                    app.connect_button.set_text("Disconnect");
-                    app.connect_button.set_enabled(true);
-                    app.set_status(StatusText::Local);
-                },
-                ClientEvent::Disconnected(reason) => {
-                    println!("Disconnected: {:?}", reason);
-                    input_transmitter = None;
-                    if !matches!(reason, ClientDisconnectReason::Disconnected) {
-                        app.show_error(&format!("Disconnected: {:?}", reason));
-                    }
-                    app.connect_button.set_text("Connect");
-                    app.connect_button.set_enabled(true);
-                    app.set_status(StatusText::NotConnected);
-                },
-                ClientEvent::PacketReceived(latest, payload) => {
-                    if latest {
-                        if let Some(ref mut transmitter) = input_transmitter {
-                            transmitter.sender().read_packet(payload)?;
+        if socket_message || last_socket_update.elapsed() > Duration::from_millis(500) {
+            socket.update();
+            while let Some(event) = socket.next_event(&mut buffer).unwrap() {
+                match event {
+                    ClientEvent::Connected(id) => {
+                        println!("Connected as {}", id);
+                        input_transmitter = Some(InputTransmitter::new(&config.hotkey, &config.backlist)?);
+                        app.connect_button.set_text("Disconnect");
+                        app.connect_button.set_enabled(true);
+                        app.set_status(StatusText::Local);
+                    },
+                    ClientEvent::Disconnected(reason) => {
+                        println!("Disconnected: {:?}", reason);
+                        input_transmitter = None;
+                        if !matches!(reason, ClientDisconnectReason::Disconnected) {
+                            app.show_error(&format!("Disconnected: {:?}", reason));
                         }
-                    }
+                        app.connect_button.set_text("Connect");
+                        app.connect_button.set_enabled(true);
+                        app.set_status(StatusText::NotConnected);
+                    },
+                    ClientEvent::PacketReceived(latest, payload) => {
+                        if latest {
+                            if let Some(ref mut transmitter) = input_transmitter {
+                                transmitter.sender_mut().read_packet(payload)?;
+                            }
+                        }
 
-                    //println!("Packet {:?}", payload);
-                },
-                _ => {}
+                        //println!("Packet {:?}", payload);
+                    },
+                    _ => {}
+                }
             }
+            last_socket_update = Instant::now();
         }
 
-        if let Some(mut sender) = input_transmitter.as_mut().map(|t|t.sender()) {
-            if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
+
+        if let Some(mut sender) = input_transmitter.as_mut().map(|t|t.sender_mut()) {
+            if socket.is_connected()  && !sender.in_sync() && last_send.elapsed() >= Duration::from_secs_f32(1.0 / config.network_send_rate as f32) {
                 let _ = socket.send(sender.write_packet()?)?;
                 last_send = Instant::now();
-                //println!("sending {}", i);
             }
         }
 
@@ -303,8 +301,12 @@ impl<'a> InputTransmitter<'a> {
         })
     }
 
-    fn sender(&mut self) -> RefMut<'_, InputSender> {
+    fn sender_mut(&mut self) -> RefMut<'_, InputSender> {
         self.sender.deref().borrow_mut()
+    }
+
+    fn sender(&self) -> Ref<'_, InputSender> {
+        self.sender.deref().borrow()
     }
 
 }
@@ -418,7 +420,8 @@ pub struct Config {
     pub host_address: String,
     pub hotkey: Hotkey,
     pub backlist: HashSet<VirtualKey>,
-    pub show_network_info: bool
+    pub show_network_info: bool,
+    pub network_send_rate: u32
 }
 
 impl Default for Config {
@@ -435,7 +438,8 @@ impl Default for Config {
                 VirtualKey::MediaPlayPause,
                 VirtualKey::MediaNextTrack
             ]),
-            show_network_info: false
+            show_network_info: false,
+            network_send_rate: 100
         }
     }
 }
