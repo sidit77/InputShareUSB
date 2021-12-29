@@ -14,6 +14,9 @@ jobs:
           - os: ubuntu-latest
             target: arm-unknown-linux-gnueabihf
             bin: inputshare-server
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            bin: inputshare-server
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: inputshare-client
@@ -22,15 +25,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-
-      - name: Set artifact name
-        shell: bash
-        run: |
-          version="$(git describe --tags --match='v*.*.*' --always)"
-          name="zoxide-$version-${{ matrix.target }}"
-          echo "ARTIFACT_NAME=$name" >> $GITHUB_ENV
-          echo "version: $version"
-          echo "artifact: $name"
+          
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -60,9 +55,17 @@ jobs:
           LICENSE.md README.md
           ./target/${{ matrix.target }}/release/${{ matrix.bin }}.exe
       - name: Upload artifact
-        uses: svenstaro/upload-release-action@v2
+        uses: actions/upload-artifact@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/${{ matrix.target }}/release/${{ matrix.bin }}.@(tar.gz|zip)
-          tag: ${{ github.ref }}
-          file_glob: true
+          name: ${{ matrix.target }}
+          path: |
+            *.zip
+            *.tar.gz
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: |
+            *.zip
+            *.tar.gz
