@@ -135,6 +135,7 @@ fn client() -> Result<()> {
                     if !matches!(reason, ClientDisconnectReason::Disconnected) {
                         app.show_error(&format!("Disconnected: {:?}", reason));
                     }
+                    app.info_label.set_text("");
                     app.connect_button.set_text("Connect");
                     app.connect_button.set_enabled(true);
                     app.set_status(StatusText::NotConnected);
@@ -145,9 +146,15 @@ fn client() -> Result<()> {
                             transmitter.sender().read_packet(payload)?;
                         }
                     }
+
                     //println!("Packet {:?}", payload);
                 },
                 _ => {}
+            }
+        }
+        if config.show_network_info {
+            if let Ok(connection) = socket.connection() {
+                app.info_label.set_text(&format!("{}ms\n{}%", connection.rtt(), f32::round(100.0 * connection.packet_loss()) as u32))
             }
         }
 //
@@ -297,16 +304,23 @@ impl<'a> InputTransmitter<'a> {
 
 #[derive(Default, NwgUi)]
 pub struct InputShareApp {
+    #[nwg_resource(size: 12, weight: 500)]
+    small_font: nwg::Font,
+
     #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE")]
     #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
     window: nwg::Window,
 
+    #[nwg_control(font: Some(&data.small_font), text: "", size: (50, 50), position: (3, 3), flags: "VISIBLE")]
+    info_label: nwg::Label,
+
     #[nwg_control(text: "Not Connected", size: (280, 45), position: (10, 10), flags: "VISIBLE|DISABLED")]
-    name_edit: nwg::RichLabel,
+    status_label: nwg::RichLabel,
 
     #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
     #[nwg_events( OnButtonClick: [InputShareApp::connect] )]
-    connect_button: nwg::Button
+    connect_button: nwg::Button,
+
 
 }
 
@@ -347,12 +361,12 @@ impl InputShareApp {
     }
 
     fn set_status(&self, status: StatusText) {
-        self.name_edit.set_text(status.text());
-        self.name_edit.set_para_format(0..100,&nwg::ParaFormat {
+        self.status_label.set_text(status.text());
+        self.status_label.set_para_format(0..100, &nwg::ParaFormat {
             alignment: Some(nwg::ParaAlignment::Center),
             ..Default::default()
         });
-        self.name_edit.set_char_format(0..100, &nwg::CharFormat {
+        self.status_label.set_char_format(0..100, &nwg::CharFormat {
             height: Some(500),
             effects: Some(CharEffects::BOLD),
             text_color: Some(status.color()),
@@ -396,6 +410,7 @@ pub struct Config {
     pub host_address: String,
     pub hotkey: Hotkey,
     pub backlist: HashSet<VirtualKey>,
+    pub show_network_info: bool
 }
 
 impl Default for Config {
@@ -411,7 +426,8 @@ impl Default for Config {
                 VirtualKey::MediaPrevTrack,
                 VirtualKey::MediaPlayPause,
                 VirtualKey::MediaNextTrack
-            ])
+            ]),
+            show_network_info: false
         }
     }
 }

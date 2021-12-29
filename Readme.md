@@ -4,7 +4,7 @@
 * Client
 - [ ] adaptive sleep duration
 - [ ] limit update rate
-- [ ] show ping / packet loss
+- [x] show ping / packet loss
 - [ ] client error management
 - [X] new icon?
 * General
