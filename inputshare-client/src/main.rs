@@ -94,7 +94,7 @@ fn client() -> Result<()> {
                 CONNECT => {
                     if !socket.is_connected() {
                         match config.host_address.to_socket_addrs() {
-                            Ok(addrs) => match addrs.filter(|x| x.is_ipv4()).next() {
+                            Ok(mut addrs) => match addrs.find(|x| x.is_ipv4()) {
                                 Some(addrs) => {
                                     socket.connect(addrs);
                                     app.connect_button.set_text("Connecting...");
@@ -284,10 +284,8 @@ impl<'a> InputTransmitter<'a> {
                                 ScrollDirection::Vertical(amount) => sender.scroll_vertical(f32_to_i8(amount))
                             }
                         }
-                    } else {
-                        if let InputEvent::MouseMoveEvent(x, y) = event {
-                            old_mouse_pos = (x,y);
-                        }
+                    } else if let InputEvent::MouseMoveEvent(x, y) = event {
+                        old_mouse_pos = (x,y);
                     }
                 }
 

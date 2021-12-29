@@ -88,8 +88,8 @@ fn server(args: Args) -> Result<()> {
         poll.poll(&mut events, timeout)?;
 
         for event in events.iter() {
-            match event.token() {
-                SIGNAL => loop {
+            if event.token() == SIGNAL {
+                loop {
                     match signals.receive()? {
                         Some(Signal::Interrupt) => break 'outer,
                         Some(Signal::Quit) => break 'outer,
@@ -98,7 +98,6 @@ fn server(args: Args) -> Result<()> {
                         None => break
                     }
                 }
-                _ => {}
             }
         }
 

@@ -208,10 +208,8 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
     let vk = key_struct.vkCode as i32;
     if scancode == 0x0 || vk == VK_SNAPSHOT || vk == VK_SCROLL || vk == VK_PAUSE || vk == VK_NUMLOCK {
         scancode = unsafe {MapVirtualKeyW(key_struct.vkCode, MAPVK_VK_TO_VSC_EX)} as WindowsScanCode;
-    } else {
-        if key_struct.flags & LLKHF_EXTENDED == LLKHF_EXTENDED {
-            scancode |= 0xe000;
-        }
+    } else if key_struct.flags & LLKHF_EXTENDED == LLKHF_EXTENDED {
+        scancode |= 0xe000;
     }
     scancode
 }

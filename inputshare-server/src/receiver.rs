@@ -56,7 +56,7 @@ impl InputReceiver {
         }
 
         let start_message = packet.read_u64::<LittleEndian>()?;
-        let diff = self.last_message.checked_sub(start_message).unwrap_or(0);
+        let diff = self.last_message.saturating_sub(start_message);
         let len = packet.read_u8()? as u64;
         packet = &packet[(2 * diff as usize)..];
         for _ in diff..len {

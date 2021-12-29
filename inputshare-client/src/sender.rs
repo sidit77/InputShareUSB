@@ -75,7 +75,7 @@ impl InputSender {
         self.remote_mouse_pos.x = packet.read_i64::<LittleEndian>()?;
         self.remote_mouse_pos.y = packet.read_i64::<LittleEndian>()?;
         let received_index = packet.read_u64::<LittleEndian>()?;
-        let diff = received_index.checked_sub(self.last_message).unwrap_or(0);
+        let diff = received_index.saturating_sub(self.last_message);
         self.message_queue.drain(..(diff as usize));
         self.last_message = received_index;
 

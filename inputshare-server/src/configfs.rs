@@ -69,9 +69,9 @@ pub fn enable_hid() -> Result<()>{
             .map(|e|e.file_name())
             .ok())
         .next()
-        .ok_or(Error::new(ErrorKind::Other, "No UDC found"))?
+        .ok_or_else(|| Error::new(ErrorKind::Other, "No UDC found"))?
         .to_str()
-        .ok_or(Error::new(ErrorKind::InvalidData, "UDC has an invalid name"))?
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "UDC has an invalid name"))?
         .to_string();
 
     fs::write("UDC", &udc_name)?;
