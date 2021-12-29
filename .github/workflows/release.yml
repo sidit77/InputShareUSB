@@ -1,0 +1,68 @@
+name: release
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: arm-unknown-linux-gnueabihf
+            bin: inputshare-server
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: inputshare-client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set artifact name
+        shell: bash
+        run: |
+          version="$(git describe --tags --match='v*.*.*' --always)"
+          name="zoxide-$version-${{ matrix.target }}"
+          echo "ARTIFACT_NAME=$name" >> $GITHUB_ENV
+          echo "version: $version"
+          echo "artifact: $name"
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --locked --target=${{ matrix.target }} --bin=${{ matrix.bin }} --color=always --verbose
+          use-cross: ${{ runner.os == 'Linux' }}
+
+      - name: Package (*nix)
+        if: runner.os != 'Windows'
+        run: >
+          tar -cv
+          LICENSE.md README.md
+          -C target/${{ matrix.target }}/release/${{ matrix.bin }}
+          | gzip --best > '${{ matrix.bin }}-${{ matrix.target }}.tar.gz'
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          7z a ${{ matrix.bin }}-${{ matrix.target }}.zip
+          LICENSE.md README.md
+          ./target/${{ matrix.target }}/release/${{ matrix.bin }}.exe
+      - name: Upload artifact
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/${{ matrix.bin }}.@(tar.gz|zip)
+          tag: ${{ github.ref }}
+          file_glob: true
