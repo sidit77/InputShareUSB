@@ -6,6 +6,7 @@ mod conversions;
 
 use native_windows_gui as nwg;
 use std::cell::{RefCell, RefMut};
+use std::convert::TryFrom;
 use std::collections::HashSet;
 use std::fs;
 use std::io::ErrorKind;
@@ -20,7 +21,7 @@ use anyhow::Result;
 use native_windows_derive::NwgUi;
 use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
-use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, TranslateMessage, WM_QUIT, WM_USER, PostMessageW};
+use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, TranslateMessage, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
@@ -46,12 +47,13 @@ fn main() -> Result<()>{
 }
 
 fn client() -> Result<()> {
-    let config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
+    let mut config = Config::load(concat!(env!("CARGO_BIN_NAME"), ".json"))?;
 
     let mut input_transmitter = None;
 
     let app = InputShareApp::build_ui(Default::default()).expect("Failed to build UI");
     app.set_status(StatusText::NotConnected);
+    app.info_label.set_visible(config.show_network_info);
 
     let socket = UdpSocket::bind(Endpoint::remote_any())?;
     socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
@@ -59,6 +61,7 @@ fn client() -> Result<()> {
     let mut socket = Client::new(socket, IDENTIFIER);
     println!("Running on {}", socket.local_addr()?);
 
+    let mut last_network_label_update = Instant::now();
     let mut last_send = Instant::now();
     let mut buffer = [0u8; MAX_PACKET_SIZE];
     'outer: loop {
@@ -72,6 +75,10 @@ fn client() -> Result<()> {
             }
             match msg.message {
                 WM_QUIT => break 'outer,
+                WM_KEYDOWN => if matches!(VirtualKey::try_from(msg.wParam as u8), Ok(VirtualKey::F1)) && (msg.lParam & (1 << 30)) == 0{
+                    config.show_network_info = !config.show_network_info;
+                    app.info_label.set_visible(config.show_network_info);
+                },
                 TOGGLED => {
                     match msg.wParam {
                         0 => app.set_status(StatusText::Remote),
@@ -135,7 +142,6 @@ fn client() -> Result<()> {
                     if !matches!(reason, ClientDisconnectReason::Disconnected) {
                         app.show_error(&format!("Disconnected: {:?}", reason));
                     }
-                    app.info_label.set_text("");
                     app.connect_button.set_text("Connect");
                     app.connect_button.set_enabled(true);
                     app.set_status(StatusText::NotConnected);
@@ -152,13 +158,7 @@ fn client() -> Result<()> {
                 _ => {}
             }
         }
-        if config.show_network_info {
-            if let Ok(connection) = socket.connection() {
-                app.info_label.set_text(&format!("{}ms\n{}%", connection.rtt(), f32::round(100.0 * connection.packet_loss()) as u32))
-            }
-        }
-//
-//
+
         if let Some(mut sender) = input_transmitter.as_mut().map(|t|t.sender()) {
             if socket.is_connected() && last_send.elapsed() >= Duration::from_millis(10) && !sender.in_sync() {
                 let _ = socket.send(sender.write_packet()?)?;
@@ -167,6 +167,14 @@ fn client() -> Result<()> {
             }
         }
 
+        if config.show_network_info && last_network_label_update.elapsed() >= Duration::from_millis(500) {
+            let (rtt, pl) = match socket.connection() {
+                Ok(connection) => (connection.rtt(), f32::round(100.0 * connection.packet_loss()) as u32),
+                Err(_) => (0, 0)
+            };
+            app.info_label.set_text(&format!("{:>3}% {}ms", pl, rtt));
+            last_network_label_update = Instant::now();
+        }
     }
 
     if socket.is_connected() {
@@ -304,17 +312,17 @@ impl<'a> InputTransmitter<'a> {
 
 #[derive(Default, NwgUi)]
 pub struct InputShareApp {
-    #[nwg_resource(size: 12, weight: 500)]
+    #[nwg_resource(family: "Consolas", size: 12, weight: 500)]
     small_font: nwg::Font,
 
     #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE")]
     #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
     window: nwg::Window,
 
-    #[nwg_control(font: Some(&data.small_font), text: "", size: (50, 50), position: (3, 3), flags: "VISIBLE")]
+    #[nwg_control(text: "", font: Some(&data.small_font), size: (100, 13), position: (2, 2), flags: "VISIBLE")]
     info_label: nwg::Label,
 
-    #[nwg_control(text: "Not Connected", size: (280, 45), position: (10, 10), flags: "VISIBLE|DISABLED")]
+    #[nwg_control(text: "Not Connected", size: (240, 45), position: (30, 10), flags: "VISIBLE|DISABLED")]
     status_label: nwg::RichLabel,
 
     #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
