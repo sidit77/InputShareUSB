@@ -13,5 +13,5 @@ mio-signals = "0.2.0"
 byteorder = "1"
 vec_map = "0.8.2"
 clap = { version = "3.0.0-rc.9", features = ["derive"] }
-inputshare-common = { path = "../inputshare-common" }
+inputshare-common = { path = "../lib/inputshare-common" }
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}

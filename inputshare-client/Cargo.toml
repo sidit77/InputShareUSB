@@ -15,7 +15,7 @@ byteorder = "1"
 anyhow = "1.0"
 native-windows-gui = "1.0"
 native-windows-derive = "1.0"
-inputshare-common = { path = "../inputshare-common" }
+inputshare-common = { path = "../lib/inputshare-common" }
 winsock2_extensions = { path = "../lib/winsock2_extensions" }
 yawi = {path = "../lib/yawi", features = ["serde"]}
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}

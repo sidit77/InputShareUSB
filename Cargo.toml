@@ -2,7 +2,7 @@
 members = [
     "inputshare-client",
     "inputshare-server",
-    "inputshare-common",
+    "lib/inputshare-common",
     "lib/winsock2_extensions",
     "lib/yawi"
 ]
