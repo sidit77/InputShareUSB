@@ -8,8 +8,9 @@ use native_windows_gui as nwg;
 use std::cell::{Ref, RefCell, RefMut};
 use std::convert::TryFrom;
 use std::collections::HashSet;
+use std::fmt::Arguments;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{Cursor, ErrorKind, Write};
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::ops::Deref;
 use std::path::Path;
@@ -105,7 +106,7 @@ fn client() -> Result<()> {
                                 }
                             }
                             Err(e) => {
-                                app.show_error(&format!("{}", e));
+                                app.show_error(format_buf!(&mut buffer, "{}", e)?);
                             },
                         }
                     }
@@ -136,7 +137,7 @@ fn client() -> Result<()> {
                         println!("Disconnected: {:?}", reason);
                         input_transmitter = None;
                         if !matches!(reason, ClientDisconnectReason::Disconnected) {
-                            app.show_error(&format!("Disconnected: {:?}", reason));
+                            app.show_error(format_buf!(&mut buffer, "Disconnected: {:?}", reason)?);
                         }
                         app.connect_button.set_text("Connect");
                         app.connect_button.set_enabled(true);
@@ -169,7 +170,7 @@ fn client() -> Result<()> {
                 Ok(connection) => (connection.rtt(), f32::round(100.0 * connection.packet_loss()) as u32),
                 Err(_) => (0, 0)
             };
-            app.info_label.set_text(&format!("{:>3}% {}ms", pl, rtt));
+            app.info_label.set_text(format_buf!(&mut buffer, "{:>3}% {}ms", pl, rtt)?);
             last_network_label_update = Instant::now();
         }
     }
@@ -457,4 +458,19 @@ impl Config {
         }
     }
 
+}
+
+fn inplace_format<'a>(buf: &'a mut [u8], args: Arguments<'_>) -> std::io::Result<&'a str> {
+    let slice = {
+        let mut cursor = Cursor::new(buf);
+        cursor.write_fmt(args)?;
+        let len = cursor.position() as usize;
+        &cursor.into_inner()[..len]
+    };
+    Ok(unsafe { std::str::from_utf8_unchecked(slice) })
+}
+
+#[macro_export]
+macro_rules! format_buf {
+    ($dst:expr, $($arg:tt)*) => (inplace_format($dst, format_args!($($arg)*)))
 }
