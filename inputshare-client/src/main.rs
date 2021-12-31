@@ -315,7 +315,8 @@ pub struct InputShareApp {
     #[nwg_resource(family: "Consolas", size: 12, weight: 500)]
     small_font: nwg::Font,
 
-    #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE")]
+    #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE",
+        icon: Some(&nwg::EmbedResource::load(None)?.icon(1, None).unwrap()))]
     #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
     window: nwg::Window,
 
