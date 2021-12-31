@@ -128,7 +128,7 @@ fn client() -> Result<()> {
                 match event {
                     ClientEvent::Connected(id) => {
                         println!("Connected as {}", id);
-                        input_transmitter = Some(InputTransmitter::new(&config.hotkey, &config.backlist)?);
+                        input_transmitter = Some(InputTransmitter::new(&config)?);
                         app.connect_button.set_text("Disconnect");
                         app.connect_button.set_enabled(true);
                         app.set_status(StatusText::Local);
@@ -191,8 +191,8 @@ struct InputTransmitter<'a> {
 
 impl<'a> InputTransmitter<'a> {
 
-    fn new(hotkey: &Hotkey, blacklist: &HashSet<VirtualKey>) -> Result<Self> {
-        let sender = Rc::new(RefCell::new(InputSender::new()));
+    fn new(config: &Config) -> Result<Self> {
+        let sender = Rc::new(RefCell::new(InputSender::new(config.mouse_speed_factor)));
         let hook = {
             let input_events = sender.clone();
             let mut old_mouse_pos = unsafe {
@@ -201,10 +201,10 @@ impl<'a> InputTransmitter<'a> {
                 (point.x, point.y)
             };
 
-            let blacklist = blacklist.clone();
+            let blacklist = config.blacklist.clone();
+            let hotkey = config.hotkey.clone();
 
             let mut captured = false;
-            let hotkey = hotkey.clone();
             let mut pressed_keys = HashSet::new();
 
             InputHook::new(move |event|{
@@ -418,9 +418,10 @@ impl<const N: usize> From<[VirtualKey; N]> for Hotkey {
 pub struct Config {
     pub host_address: String,
     pub hotkey: Hotkey,
-    pub backlist: HashSet<VirtualKey>,
+    pub blacklist: HashSet<VirtualKey>,
     pub show_network_info: bool,
-    pub network_send_rate: u32
+    pub network_send_rate: u32,
+    pub mouse_speed_factor: f32
 }
 
 impl Default for Config {
@@ -428,7 +429,7 @@ impl Default for Config {
         Self {
             host_address: String::from("raspberrypi.local:60067"),
             hotkey: Hotkey::from([VirtualKey::Apps]),
-            backlist: HashSet::from([
+            blacklist: HashSet::from([
                 VirtualKey::VolumeDown,
                 VirtualKey::VolumeUp,
                 VirtualKey::VolumeMute,
@@ -438,7 +439,8 @@ impl Default for Config {
                 VirtualKey::MediaNextTrack
             ]),
             show_network_info: false,
-            network_send_rate: 100
+            network_send_rate: 100,
+            mouse_speed_factor: 1.0
         }
     }
 }

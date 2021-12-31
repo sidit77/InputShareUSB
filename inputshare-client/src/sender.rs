@@ -9,6 +9,8 @@ type MouseType = i64;
 pub struct InputSender {
     packet_buffer: Vec<u8>,
     local_mouse_pos: Vec2<MouseType>,
+    local_mouse_pos_raw: Vec2<MouseType>,
+    mouse_speed_factor: f64,
     remote_mouse_pos: Vec2<MouseType>,
     message_queue: VecDeque<[u8; 2]>,
     last_message: u64
@@ -16,10 +18,12 @@ pub struct InputSender {
 
 impl InputSender {
     
-    pub fn new() -> Self {
+    pub fn new(mouse_speed_factor: f32) -> Self {
         Self{
             packet_buffer: Vec::new(),
             local_mouse_pos: Vec2::new(0, 0),
+            local_mouse_pos_raw: Vec2::new(0, 0),
+            mouse_speed_factor: mouse_speed_factor.into(),
             remote_mouse_pos: Vec2::new(0, 0),
             message_queue: VecDeque::new(),
             last_message: 0
@@ -27,8 +31,16 @@ impl InputSender {
     }
 
     pub fn move_mouse(&mut self, x: MouseType, y: MouseType) {
-        self.local_mouse_pos.x += x;
-        self.local_mouse_pos.y += y;
+        if (self.mouse_speed_factor - 1.0).abs() > f64::EPSILON {
+            self.local_mouse_pos_raw.x += x;
+            self.local_mouse_pos_raw.y += y;
+            self.local_mouse_pos.x = f64::round(self.local_mouse_pos_raw.x as f64 * self.mouse_speed_factor) as MouseType;
+            self.local_mouse_pos.y = f64::round(self.local_mouse_pos_raw.y as f64 * self.mouse_speed_factor) as MouseType;
+        } else {
+            self.local_mouse_pos.x += x;
+            self.local_mouse_pos.y += y;
+        }
+
     }
 
     pub fn reset(&mut self) {
