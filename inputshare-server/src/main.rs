@@ -11,7 +11,7 @@ use anyhow::Result;
 use clap::Parser;
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
-use udp_connections::{Endpoint, MAX_PACKET_SIZE, Server, ServerEvent, Transport};
+use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use vec_map::VecMap;
 use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
@@ -22,11 +22,11 @@ use crate::receiver::{InputEvent, InputReceiver};
 struct Args {
     /// When set automatically moves the mouse every x seconds without input
     #[clap(short, long)]
-    idle_timeout: Option<u64>,
+    auto_movement_timeout: Option<u64>,
 
-    /// The port that should be used
-    #[clap(short, long, default_value_t = 60067)]
-    port: u16,
+    /// The interface that should be bound
+    #[clap(short, long, default_value = "0.0.0.0:60067")]
+    interface: String,
 }
 
 fn main() -> Result<()>{
@@ -55,7 +55,7 @@ fn server(args: Args) -> Result<()> {
     let mut signals = Signals::new(SignalSet::all())?;
     poll.registry().register(&mut signals, SIGNAL, Interest::READABLE)?;
 
-    let mut socket = UdpSocket::bind(Endpoint::remote_port(args.port))?;
+    let mut socket = UdpSocket::bind(args.interface.parse()?)?;
     poll.registry().register(&mut socket, SERVER, Interest::READABLE)?;
     let mut socket = Server::new(MioSocket::from(socket), IDENTIFIER, 1);
 
@@ -70,7 +70,7 @@ fn server(args: Args) -> Result<()> {
             true => None,
             false => Some(Duration::from_millis(550))
         };
-        if let Some(secs) = args.idle_timeout {
+        if let Some(secs) = args.auto_movement_timeout {
             let mut remaining = (last_input + Duration::from_secs(secs)).saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 mouse.move_by(idle_move_x, 0)?;
