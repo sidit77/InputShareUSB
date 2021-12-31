@@ -156,7 +156,7 @@ To start the server simply run:
 sudo ./inputshare-server
 ````
 
-The sever can be configured using command line arguments (Run ``./inputshare-sever -h` for more infomation).
+The sever can be configured using command line arguments (Run `./inputshare-sever -h` for more infomation).
 
 
 
