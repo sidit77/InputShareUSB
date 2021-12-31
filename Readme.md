@@ -73,7 +73,7 @@ During the first run the client will generate a config file called `inputshare-c
 * `hotkey`: The hotkey that toggles input between the local and remote pc. The hotkey has two parts: the trigger key which triggers the swap and a variable amount of modifier keys which also have to be pressed for the trigger to work. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
 * `backlist`: All keys included in in this list will be ignored by the client. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
 * `show_network_info`: When set to `true` the client will display the round-trip-time and packet loss to the server. This call also be toggled at runtime by pressing `F1`.
-* `network_send_rate`: The number of packets per second that the client will send to the server while transmitting. Higher values mean lower latency and smoother mouse movement while lower values mean less network activity. Note that if the send rate is set to high it will flood the connection and cause massive delays / packet loss.
+* `network_send_rate`: The number of packets per second that the client will send to the server while transmitting. Higher values mean lower latency and smoother mouse movement while lower values mean less network activity. Note that if the send rate is set to high it will flood the connection and cause massive delays / packet loss. Consider that the `mouse-tesselation-factor` option of the server has a similar effect and should be tuned in tandem.
 
 
 

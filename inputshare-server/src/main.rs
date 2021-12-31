@@ -1,10 +1,12 @@
 mod receiver;
 mod configfs;
 
+use std::convert::TryInto;
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::net::{SocketAddr};
+use std::num::NonZeroU8;
 use std::time::{Duration, Instant};
 use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
@@ -23,6 +25,11 @@ struct Args {
     /// When set automatically moves the mouse every x seconds without input
     #[clap(short, long)]
     auto_movement_timeout: Option<u64>,
+
+    /// Split each mouse movement command in up to x usb packets
+    /// Higher values mean smoother movement but carry a higher risk of saturating the usb connection
+    #[clap(short, long, default_value_t = 5)]
+    mouse_tesselation_factor: u8,
 
     /// The interface that should be bound
     #[clap(short, long, default_value = "0.0.0.0:60067")]
@@ -44,7 +51,7 @@ fn main() -> Result<()>{
 fn server(args: Args) -> Result<()> {
     println!("Opening HID devices");
 
-    let mut mouse = Mouse::new()?;
+    let mut mouse = Mouse::new(args.mouse_tesselation_factor.try_into()?)?;
     let mut keyboard = Keyboard::new()?;
 
     const SERVER: Token = Token(0);
@@ -254,16 +261,18 @@ impl Keyboard {
 #[derive(Debug)]
 pub struct Mouse {
     device: File,
-    pressed_buttons: HidMouseButton
+    pressed_buttons: HidMouseButton,
+    tess_factor: i16
 }
 
 impl Mouse {
 
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new(tess_factor: NonZeroU8) -> std::io::Result<Self> {
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
         Ok(Self {
             device,
-            pressed_buttons: HidMouseButton::empty()
+            pressed_buttons: HidMouseButton::empty(),
+            tess_factor: i16::from(tess_factor.get())
         })
     }
 
@@ -294,8 +303,17 @@ impl Mouse {
         self.send_report(0, 0,0,0)
     }
 
-    pub fn move_by(&mut self, dx: i16, dy: i16) -> std::io::Result<()> {
-        self.send_report(dx, dy, 0,0)
+    pub fn move_by(&mut self, mut dx: i16, mut dy: i16) -> std::io::Result<()> {
+        let sx = abs_max(dx / self.tess_factor, dx.signum());
+        let sy = abs_max(dy / self.tess_factor, dy.signum());
+        while dx != 0 || dy != 0 {
+            let tx = abs_min(dx, sx);
+            let ty = abs_min(dy, sy);
+            self.send_report(tx, ty, 0,0)?;
+            dx -= tx;
+            dy -= ty;
+        }
+        Ok(())
     }
 
     pub fn scroll_vertical(&mut self, amount: i8) -> std::io::Result<()> {
@@ -306,4 +324,20 @@ impl Mouse {
         self.send_report(0, 0, 0, amount)
     }
 
+}
+
+fn abs_max(a: i16, b: i16) -> i16 {
+    if a.abs() >= b.abs() {
+        a
+    } else {
+        b
+    }
+}
+
+fn abs_min(a: i16, b: i16) -> i16 {
+    if a.abs() <= b.abs() {
+        a
+    } else {
+        b
+    }
 }
