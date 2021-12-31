@@ -91,7 +91,7 @@ echo "libcomposite" | sudo tee -a /etc/modules
 
 
 
-#### Step 3: Select the correct version
+#### Step 2: Select the correct version
 
 Not every raspberry pi version uses the same architecture.
 
