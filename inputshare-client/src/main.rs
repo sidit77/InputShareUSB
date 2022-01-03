@@ -237,10 +237,14 @@ impl<'a> InputTransmitter<'a> {
                                 if captured {
                                     input_events.deref().borrow_mut().reset();
                                 } else {
-                                    send_inputs(pressed_keys.iter().copied().map(|k| match k.is_mouse_button() {
-                                        true => Input::MouseButtonInput(k, KeyState::Released),
-                                        false => Input::KeyboardKeyInput(k, KeyState::Released),
-                                    })).unwrap_or_else(|e| println!("{}", e));
+                                    send_inputs(pressed_keys
+                                        .iter()
+                                        .copied()
+                                        .filter(|k| *k != hotkey.trigger)
+                                        .map(|k| match k.is_mouse_button() {
+                                            true => Input::MouseButtonInput(k, KeyState::Released),
+                                            false => Input::KeyboardKeyInput(k, KeyState::Released),
+                                        })).unwrap_or_else(|e| println!("{}", e));
                                 }
                                 captured = !captured;
                                 unsafe {
