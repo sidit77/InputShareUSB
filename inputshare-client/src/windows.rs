@@ -5,7 +5,7 @@ use std::time::Duration;
 use winapi::shared::minwindef::{FALSE};
 use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0, WAIT_FAILED};
-use winapi::um::winuser::{MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, QS_ALLINPUT};
+use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, IsDialogMessageW, MSG, MsgWaitForMultipleObjects, PeekMessageW, PM_REMOVE, QS_ALLINPUT, TranslateMessage};
 
 
 pub fn wait_message_timeout(timeout: Option<Duration>) -> std::io::Result<bool> {
@@ -28,7 +28,13 @@ pub fn get_message() -> Option<MSG> {
         let mut msg: MSG = mem::zeroed();
         match PeekMessageW(&mut msg, null_mut(), 0, 0, PM_REMOVE) {
             FALSE => None,
-            _ => Some(msg)
+            _ => {
+                if IsDialogMessageW(GetAncestor(msg.hwnd, GA_ROOT), &mut msg) == 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                Some(msg)
+            }
         }
     }
 }

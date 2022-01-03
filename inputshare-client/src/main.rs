@@ -22,7 +22,7 @@ use anyhow::Result;
 use native_windows_derive::NwgUi;
 use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
-use winapi::um::winuser::{DispatchMessageW, GA_ROOT, GetAncestor, GetCursorPos, IsDialogMessageW, TranslateMessage, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
+use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
@@ -37,6 +37,10 @@ const TOGGLED: u32 = WM_USER + 3;
 fn main() -> Result<()>{
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
+
+    if std::env::args().find(|arg| arg == "print_keys").is_some() {
+        return run_key_tester()
+    }
 
     match client() {
         Ok(_) => Ok(()),
@@ -72,13 +76,7 @@ fn client() -> Result<()> {
             _ => Duration::from_millis(500)
         }))?;
         let mut socket_message = false;
-        while let Some(mut msg) = get_message() {
-            unsafe {
-                if IsDialogMessageW(GetAncestor(msg.hwnd, GA_ROOT), &mut msg) == 0 {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-            }
+        while let Some(msg) = get_message() {
             match msg.message {
                 WM_QUIT => break 'outer,
                 WM_KEYDOWN => if matches!(VirtualKey::try_from(msg.wParam as u8), Ok(VirtualKey::F1)) && (msg.lParam & (1 << 30)) == 0{
@@ -480,4 +478,42 @@ fn inplace_format<'a>(buf: &'a mut [u8], args: Arguments<'_>) -> std::io::Result
 #[macro_export]
 macro_rules! format_buf {
     ($dst:expr, $($arg:tt)*) => (inplace_format($dst, format_args!($($arg)*)))
+}
+
+#[derive(Default, NwgUi)]
+pub struct KeyTester {
+    #[nwg_resource(family: "Consolas", size: 25, weight: 500)]
+    small_font: nwg::Font,
+
+    #[nwg_control(size: (300, 50), position: (300, 300), title: "Key Tester", flags: "WINDOW|VISIBLE",
+    icon: Some(&nwg::EmbedResource::load(None)?.icon(1, None).unwrap()))]
+    #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()])]
+    window: nwg::Window,
+
+    #[nwg_control(text: "Press a key", h_align: HTextAlign::Center, v_align: VTextAlign::Center,
+      font: Some(&data.small_font), size: (300, 50), position: (0, 10), flags: "VISIBLE")]
+    info_label: nwg::Label,
+
+}
+
+fn run_key_tester() -> Result<()> {
+    let app = KeyTester::build_ui(Default::default()).expect("Failed to build UI");
+    let mut pressed_keys = HashSet::new();
+    let _h = InputHook::new(move |event|{
+        if let Some(event) = event.to_key_event() {
+            match (pressed_keys.contains(&event.key), event.state) {
+                (false, KeyState::Pressed) => {
+                    pressed_keys.insert(event.key);
+                    app.info_label.set_text(&format!("{:?}", event.key))
+                },
+                (true, KeyState::Released) => {
+                    pressed_keys.remove(&event.key);
+                },
+                _ => { }
+            }
+        }
+        true
+    }, true, HookType::KeyboardMouse)?;
+    nwg::dispatch_thread_events();
+    Ok(())
 }
