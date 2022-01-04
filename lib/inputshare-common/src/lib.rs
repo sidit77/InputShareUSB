@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
@@ -15,14 +16,13 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
     }
 }
 
-pub type HidScanCode = u8;
-pub use flags::{HidMouseButton, HidModifierKey};
+pub use flags::{HidMouseButton, HidModifierKeys};
 
 #[allow(non_upper_case_globals)]
 pub mod flags {
     use bitflags::bitflags;
     bitflags! {
-        pub struct HidModifierKey: u8 {
+        pub struct HidModifierKeys: u8 {
             const None    = 0x00;
             const LCtrl   = 0x01;
             const LShift  = 0x02;
@@ -51,8 +51,6 @@ pub mod flags {
 pub enum MessageType {
     KeyPress,
     KeyRelease,
-    ModifierPress,
-    ModifierRelease,
     MouseButtonPress,
     MouseButtonRelease,
     HorizontalScrolling,
@@ -276,10 +274,20 @@ pub enum HidKeyCode {
     MediaCalc = 0xfb,
 }
 
-impl HidKeyCode {
+impl TryFrom<HidKeyCode> for HidModifierKeys {
+    type Error = ();
 
-    pub fn valid(self) -> bool {
-        !matches!(self, HidKeyCode::None | HidKeyCode::ErrorRollOver | HidKeyCode::PostFail | HidKeyCode::ErrorUndefined)
+    fn try_from(value: HidKeyCode) -> Result<Self, Self::Error> {
+        match value {
+            HidKeyCode::LeftCtrl   => Ok(HidModifierKeys::LCtrl),
+            HidKeyCode::LeftShift  => Ok(HidModifierKeys::LShift),
+            HidKeyCode::LeftAlt    => Ok(HidModifierKeys::LAlt),
+            HidKeyCode::LeftMeta   => Ok(HidModifierKeys::LMeta),
+            HidKeyCode::RightCtrl  => Ok(HidModifierKeys::RCtrl),
+            HidKeyCode::RightShift => Ok(HidModifierKeys::RShift),
+            HidKeyCode::RightAlt   => Ok(HidModifierKeys::RAlt),
+            HidKeyCode::RightMeta  => Ok(HidModifierKeys::RMeta),
+            _ => Err(())
+        }
     }
-
 }

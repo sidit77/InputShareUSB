@@ -15,7 +15,7 @@ use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use vec_map::VecMap;
-use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, IDENTIFIER};
+use inputshare_common::{HidKeyCode, HidModifierKeys, HidMouseButton, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
 /// The server for inputshare
@@ -132,8 +132,6 @@ fn server(args: Args) -> Result<()> {
                                     InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16)?,
                                     InputEvent::KeyPress(key) => keyboard.press_key(key)?,
                                     InputEvent::KeyRelease(key) => keyboard.release_key(key)?,
-                                    InputEvent::ModifierPress(key) => keyboard.press_modifier(key)?,
-                                    InputEvent::ModifierRelease(key) => keyboard.release_modifier(key)?,
                                     InputEvent::MouseButtonPress(button) => mouse.press_button(button)?,
                                     InputEvent::MouseButtonRelease(button) => mouse.release_button(button)?,
                                     InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount)?,
@@ -144,7 +142,7 @@ fn server(args: Args) -> Result<()> {
                                     }
                                 }
                                 last_input = Instant::now();
-                                //println!("{:?}", event);
+                                // println!("{:?}", event);
                             }
                         }
 
@@ -205,7 +203,7 @@ impl From<UdpSocket> for MioSocket {
 pub struct Keyboard {
     device: File,
     pressed_keys: Vec<HidKeyCode>,
-    pressed_modifiers: HidModifierKey,
+    pressed_modifiers: HidModifierKeys,
 }
 
 impl Keyboard {
@@ -215,7 +213,7 @@ impl Keyboard {
         Ok(Self {
             device,
             pressed_keys: Vec::new(),
-            pressed_modifiers: HidModifierKey::empty()
+            pressed_modifiers: HidModifierKeys::empty()
         })
     }
 
@@ -232,27 +230,23 @@ impl Keyboard {
 
     pub fn reset(&mut self) -> std::io::Result<()> {
         self.pressed_keys.clear();
-        self.pressed_modifiers = HidModifierKey::empty();
+        self.pressed_modifiers = HidModifierKeys::empty();
         self.send_report()
     }
 
     pub fn press_key(&mut self, key: HidKeyCode) -> std::io::Result<()> {
-        self.pressed_keys.push(key);
+        match key.try_into() {
+            Ok(modifier) => self.pressed_modifiers.insert(modifier),
+            Err(_) => self.pressed_keys.push(key)
+        }
         self.send_report()
     }
 
     pub fn release_key(&mut self, key: HidKeyCode) -> std::io::Result<()> {
-        self.pressed_keys.retain(|k| *k != key);
-        self.send_report()
-    }
-
-    pub fn press_modifier(&mut self, key: HidModifierKey) -> std::io::Result<()> {
-        self.pressed_modifiers.insert(key);
-        self.send_report()
-    }
-
-    pub fn release_modifier(&mut self, key: HidModifierKey) -> std::io::Result<()> {
-        self.pressed_modifiers.remove(key);
+        match key.try_into() {
+            Ok(modifier) => self.pressed_modifiers.remove(modifier),
+            Err(_) => self.pressed_keys.retain(|k| *k != key)
+        }
         self.send_report()
     }
 

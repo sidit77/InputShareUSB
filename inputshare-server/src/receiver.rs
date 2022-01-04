@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, MessageType, Vec2};
+use inputshare_common::{HidKeyCode, HidMouseButton, MessageType, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -11,8 +11,6 @@ pub enum InputEvent {
     MouseMove(MouseType, MouseType),
     KeyPress(HidKeyCode),
     KeyRelease(HidKeyCode),
-    ModifierPress(HidModifierKey),
-    ModifierRelease(HidModifierKey),
     MouseButtonPress(HidMouseButton),
     MouseButtonRelease(HidMouseButton),
     HorizontalScrolling(i8),
@@ -59,14 +57,12 @@ impl InputReceiver {
         let diff = self.last_message.saturating_sub(start_message);
         let len = packet.read_u8()? as u64;
         packet = &packet[(2 * diff as usize)..];
-        for _ in diff..len {
+        for i in diff..len {
             let msg_id = packet.read_u8()?;
             let msg_arg = packet.read_u8()?;
             match MessageType::try_from(msg_id) {
                 Ok(MessageType::KeyPress) => self.events.push_back(InputEvent::KeyPress(HidKeyCode::from(msg_arg))),
                 Ok(MessageType::KeyRelease) => self.events.push_back(InputEvent::KeyRelease(HidKeyCode::from(msg_arg))),
-                Ok(MessageType::ModifierPress) => self.events.push_back(InputEvent::ModifierPress(HidModifierKey::from_bits(msg_arg).unwrap())),
-                Ok(MessageType::ModifierRelease) => self.events.push_back(InputEvent::ModifierRelease(HidModifierKey::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::MouseButtonPress) => self.events.push_back(InputEvent::MouseButtonPress(HidMouseButton::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::MouseButtonRelease) => self.events.push_back(InputEvent::MouseButtonRelease(HidMouseButton::from_bits(msg_arg).unwrap())),
                 Ok(MessageType::HorizontalScrolling) => self.events.push_back(InputEvent::HorizontalScrolling(msg_arg as i8)),
@@ -74,9 +70,8 @@ impl InputReceiver {
                 Ok(MessageType::Reset) => self.events.push_back(InputEvent::Reset),
                 Err(e) => println!("Invalid message: {}", e)
             }
+            self.last_message = start_message + i + 1;
         }
-        self.last_message = start_message + len;
-
 
         self.packet_buffer.clear();
         self.packet_buffer.write_i64::<LittleEndian>(self.local_mouse_pos.x)?;

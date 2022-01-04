@@ -1,22 +1,8 @@
-use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton};
+use inputshare_common::{HidKeyCode, HidMouseButton};
 use yawi::{WindowsScanCode, VirtualKey};
 
 pub fn f32_to_i8(v: f32) -> i8 {
      v.round().clamp(i8::MIN as f32, i8::MAX as f32) as i8
-}
-
-pub fn vk_to_mod(key: VirtualKey) -> Option<HidModifierKey> {
-    match key {
-        VirtualKey::LShift   => Some(HidModifierKey::LShift),
-        VirtualKey::LControl => Some(HidModifierKey::LCtrl),
-        VirtualKey::LWin     => Some(HidModifierKey::LMeta),
-        VirtualKey::LMenu    => Some(HidModifierKey::LAlt),
-        VirtualKey::RShift   => Some(HidModifierKey::RShift),
-        VirtualKey::RControl => Some(HidModifierKey::RCtrl),
-        VirtualKey::RWin     => Some(HidModifierKey::RMeta),
-        VirtualKey::RMenu    => Some(HidModifierKey::RAlt),
-        _                    => None
-    }
 }
 
 pub fn vk_to_mb(key: VirtualKey) -> Option<HidMouseButton> {
@@ -156,6 +142,7 @@ pub fn wsc_to_hkc(scancode: WindowsScanCode) -> Option<HidKeyCode> {
           0xe030 => Some(HidKeyCode::MediaVolumeUp),
           0xe032 => Some(HidKeyCode::MediaWWW),
           0xe035 => Some(HidKeyCode::KpSlash),
+          0xe036 => Some(HidKeyCode::RightShift),
           0xe038 => Some(HidKeyCode::RightAlt),
           0xe047 => Some(HidKeyCode::Home),
           0xe048 => Some(HidKeyCode::Up),

@@ -26,7 +26,7 @@ use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_US
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
-use crate::conversions::{f32_to_i8, vk_to_mb, vk_to_mod, wsc_to_hkc};
+use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_hkc};
 use crate::sender::InputSender;
 use crate::windows::{get_message, wait_message_timeout};
 
@@ -262,17 +262,13 @@ impl<'a> InputTransmitter<'a> {
                                 sender.move_mouse((x - ox) as i64, (y - oy) as i64);
                                 //old_mouse_pos = Some((x,y))
                             }
-                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match vk_to_mod(vk) {
-                                Some(modifier) => match ks {
-                                    KeyState::Pressed => sender.press_modifier(modifier),
-                                    KeyState::Released => sender.release_modifier(modifier)
-                                }
-                                None => match wsc_to_hkc(sc) {
-                                    Some(key) => match ks {
-                                        KeyState::Pressed => sender.press_key(key),
-                                        KeyState::Released => sender.release_key(key)
-                                    },
-                                    None => println!("Unknown key: {}", vk)
+                            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match wsc_to_hkc(sc) {
+                                Some(kc) => match ks {
+                                    KeyState::Pressed => sender.press_key(kc),
+                                    KeyState::Released => sender.release_key(kc)
+                                },
+                                None => if !matches!(sc, 0x21d) {
+                                    println!("Unknown key: {} ({:x})", vk, sc)
                                 }
                             }
                             InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
@@ -511,6 +507,9 @@ fn run_key_tester() -> Result<()> {
                 },
                 _ => { }
             }
+        }
+        if let InputEvent::KeyboardKeyEvent(_, sc, _) = event {
+            println!("{:?} {:?}", event, wsc_to_hkc(sc));
         }
         true
     }, true, HookType::KeyboardMouse)?;

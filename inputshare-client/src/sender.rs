@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use inputshare_common::{HidKeyCode, HidModifierKey, HidMouseButton, MessageType, Vec2};
+use inputshare_common::{HidKeyCode, HidMouseButton, MessageType, Vec2};
 use std::io::{Result, Write};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -53,14 +53,6 @@ impl InputSender {
 
     pub fn release_key(&mut self, key: HidKeyCode) {
         self.message_queue.push_back([MessageType::KeyRelease.into(), key.into()])
-    }
-
-    pub fn press_modifier(&mut self, key: HidModifierKey) {
-        self.message_queue.push_back([MessageType::ModifierPress.into(), key.bits()])
-    }
-
-    pub fn release_modifier(&mut self, key: HidModifierKey) {
-        self.message_queue.push_back([MessageType::ModifierRelease.into(), key.bits()])
     }
 
     pub fn press_mouse_button(&mut self, button: HidMouseButton) {
