@@ -42,6 +42,37 @@ pub enum HidButtonCode {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
+#[repr(u16)]
+pub enum ConsumerDeviceCode {
+    #[num_enum(default)]
+    None = 0x00,
+    NextTrack = 0x00b5,
+    PreviousTrack = 0x00b6,
+    Stop = 0x00b7,
+    PlayPause = 0x00cd,
+    Mute = 0x00e2,
+    BassBoost = 0x00e5,
+    Loudness = 0x00e7,
+    VolumeUp = 0x00e9,
+    VolumeDown = 0x00ea,
+    BassUp = 0x0152,
+    BassDown = 0x0153,
+    TrebleUp = 0x0154,
+    TrebleDown = 0x0155,
+    MediaSelect = 0x0183,
+    Mail = 0x018a,
+    Calculator = 0x0192,
+    MyComputer = 0x0194,
+    BrowserSearch = 0x0221,
+    BrowserHome = 0x0223,
+    BrowserBack = 0x0224,
+    BrowserForward = 0x0225,
+    BrowserStop = 0x0226,
+    BrowserRefresh = 0x0227,
+    BrowserFavorites = 0x022a
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
 pub enum HidKeyCode {
     #[num_enum(default)]
@@ -234,25 +265,6 @@ pub enum HidKeyCode {
     RightAlt = 0xe6,
     RightMeta = 0xe7,
 
-    // Unofficial
-    MediaPlayPause = 0xe8,
-    MediaStopCD = 0xe9,
-    MediaPreviousSong = 0xea,
-    MediaNextSong = 0xeb,
-    MediaEjectCD = 0xec,
-    MediaVolumeUp = 0xed,
-    MediaVolumeDown = 0xee,
-    MediaMute = 0xef,
-    MediaWWW = 0xf0,
-    MediaBack = 0xf1,
-    MediaForward = 0xf2,
-    MediaStop = 0xf3,
-    MediaFind = 0xf4,
-    MediaScrollUp = 0xf5,
-    MediaScrollDown = 0xf6,
-    MediaEdit = 0xf7,
-    MediaSleep = 0xf8,
-    MediaCoffee = 0xf9,
-    MediaRefresh = 0xfa,
-    MediaCalc = 0xfb,
 }
+
+

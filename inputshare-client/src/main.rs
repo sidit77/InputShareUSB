@@ -26,7 +26,7 @@ use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_US
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
-use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_hkc};
+use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::sender::InputSender;
 use crate::windows::{get_message, wait_message_timeout};
 
@@ -267,8 +267,11 @@ impl<'a> InputTransmitter<'a> {
                                     KeyState::Pressed => sender.press_key(kc),
                                     KeyState::Released => sender.release_key(kc)
                                 },
-                                None => if !matches!(sc, 0x21d) {
-                                    println!("Unknown key: {} ({:x})", vk, sc)
+                                None => match wsc_to_cdc(sc){
+                                    Some(cdc) => println!("{:?}", cdc),
+                                    None => if! matches!(sc, 0x21d) {
+                                        println!("Unknown key: {} ({:x})", vk, sc)
+                                    }
                                 }
                             }
                             InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {

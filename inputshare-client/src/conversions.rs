@@ -1,4 +1,4 @@
-use inputshare_common::{HidButtonCode, HidKeyCode};
+use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode};
 use yawi::{WindowsScanCode, VirtualKey};
 
 pub fn f32_to_i8(v: f32) -> i8 {
@@ -130,17 +130,8 @@ pub fn wsc_to_hkc(scancode: WindowsScanCode) -> Option<HidKeyCode> {
           0xf1 => Some(HidKeyCode::Language2),
           0xf2 => Some(HidKeyCode::Language1),
           0xff => Some(HidKeyCode::ErrorRollOver),
-          0xe010 => Some(HidKeyCode::MediaPreviousSong),
-          0xe019 => Some(HidKeyCode::MediaNextSong),
           0xe01c => Some(HidKeyCode::KpEnter),
           0xe01d => Some(HidKeyCode::RightCtrl),
-          0xe020 => Some(HidKeyCode::MediaMute),
-          0xe021 => Some(HidKeyCode::MediaCalc),
-          0xe022 => Some(HidKeyCode::MediaPlayPause),
-          0xe024 => Some(HidKeyCode::MediaStopCD),
-          0xe02e => Some(HidKeyCode::MediaVolumeDown),
-          0xe030 => Some(HidKeyCode::MediaVolumeUp),
-          0xe032 => Some(HidKeyCode::MediaWWW),
           0xe035 => Some(HidKeyCode::KpSlash),
           0xe036 => Some(HidKeyCode::RightShift),
           0xe038 => Some(HidKeyCode::RightAlt),
@@ -160,13 +151,31 @@ pub fn wsc_to_hkc(scancode: WindowsScanCode) -> Option<HidKeyCode> {
           0xe05e => Some(HidKeyCode::Power),
           0xe05f => Some(HidKeyCode::LockingCapsLock),
           0xe063 => Some(HidKeyCode::LockingNumLock),
-          0xe065 => Some(HidKeyCode::MediaFind),
-          0xe067 => Some(HidKeyCode::MediaRefresh),
-          0xe068 => Some(HidKeyCode::MediaStop),
-          0xe069 => Some(HidKeyCode::MediaForward),
-          0xe06a => Some(HidKeyCode::MediaBack),
-          0xe06d => Some(HidKeyCode::MediaEjectCD),
           0xe11d => Some(HidKeyCode::Pause),
+          _ => None
+     }
+}
+
+pub fn wsc_to_cdc(scancode: WindowsScanCode) -> Option<ConsumerDeviceCode> {
+     match scancode {
+          0xe019 => Some(ConsumerDeviceCode::NextTrack),
+          0xe010 => Some(ConsumerDeviceCode::PreviousTrack),
+          0xe024 => Some(ConsumerDeviceCode::Stop),
+          0xe022 => Some(ConsumerDeviceCode::PlayPause),
+          0xe020 => Some(ConsumerDeviceCode::Mute),
+          0xe030 => Some(ConsumerDeviceCode::VolumeUp),
+          0xe02e => Some(ConsumerDeviceCode::VolumeDown),
+          0xe06d => Some(ConsumerDeviceCode::MediaSelect),
+          0xe06c => Some(ConsumerDeviceCode::Mail),
+          0xe021 => Some(ConsumerDeviceCode::Calculator),
+          0xe06b => Some(ConsumerDeviceCode::MyComputer),
+          0xe065 => Some(ConsumerDeviceCode::BrowserSearch),
+          0xe032 => Some(ConsumerDeviceCode::BrowserHome),
+          0xe06a => Some(ConsumerDeviceCode::BrowserBack),
+          0xe069 => Some(ConsumerDeviceCode::BrowserForward),
+          0xe068 => Some(ConsumerDeviceCode::BrowserStop),
+          0xe067 => Some(ConsumerDeviceCode::BrowserRefresh),
+          0xe066 => Some(ConsumerDeviceCode::BrowserFavorites),
           _ => None
      }
 }
