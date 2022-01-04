@@ -53,6 +53,7 @@ fn server(args: Args) -> Result<()> {
 
     let mut mouse = Mouse::new(args.mouse_tesselation_factor.try_into()?)?;
     let mut keyboard = Keyboard::new()?;
+    let mut consumer_device = ConsumerDevice::new()?;
 
     const SERVER: Token = Token(0);
     const SIGNAL: Token = Token(1);
@@ -108,6 +109,8 @@ fn server(args: Args) -> Result<()> {
             }
         }
 
+        consumer_device.press_key(1 << 5)?;
+        consumer_device.release_key(1 << 5)?;
         socket.update();
         loop {
             match socket.next_event(&mut buffer) {
@@ -120,6 +123,7 @@ fn server(args: Args) -> Result<()> {
                         println!("Client {} disconnected: {:?}", client_id, reason);
                         mouse.reset()?;
                         keyboard.reset()?;
+                        consumer_device.reset()?;
                         receivers.remove(client_id.into());
                     },
                     ServerEvent::PacketReceived(client_id, latest, payload) => if latest {
@@ -161,6 +165,7 @@ fn server(args: Args) -> Result<()> {
 
     mouse.reset()?;
     keyboard.reset()?;
+    consumer_device.reset()?;
 
     for client in socket.connected_clients().collect::<Vec<_>>() {
         socket.disconnect(client).unwrap();
@@ -247,6 +252,43 @@ impl Keyboard {
             Ok(modifier) => self.pressed_modifiers.remove(modifier),
             Err(_) => self.pressed_keys.retain(|k| *k != key)
         }
+        self.send_report()
+    }
+
+}
+
+#[derive(Debug)]
+pub struct ConsumerDevice {
+    device: File,
+    pressed_keys: u16,
+}
+
+impl ConsumerDevice {
+
+    pub fn new() -> std::io::Result<Self> {
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2")?;
+        Ok(Self {
+            device,
+            pressed_keys: 0
+        })
+    }
+
+    fn send_report(&mut self) -> std::io::Result<()> {
+        self.device.write_all(&self.pressed_keys.to_le_bytes())
+    }
+
+    pub fn reset(&mut self) -> std::io::Result<()> {
+        self.pressed_keys = 0;
+        self.send_report()
+    }
+
+    pub fn press_key(&mut self, key: u16) -> std::io::Result<()> {
+        self.pressed_keys |= key;
+        self.send_report()
+    }
+
+    pub fn release_key(&mut self, key: u16) -> std::io::Result<()> {
+        self.pressed_keys &= !key;
         self.send_report()
     }
 

@@ -76,6 +76,35 @@ const MOUSE_REPORT_DESC: &[u8] = &[
     0xC0,              // End Collection
 ];
 
+const CONSUMER_REPORT_DESC: &[u8] = &[
+    0x05, 0x0C,        // Usage Page (Consumer)
+    0x09, 0x01,        // Usage (Consumer Control)
+    0xA1, 0x01,        // Collection (Application)
+    0x05, 0x0C,        //   Usage Page (Consumer)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x01,        //   Logical Maximum (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x95, 0x10,        //   Report Count (16)
+    0x09, 0xB5,        //   Usage (Scan Next Track)
+    0x09, 0xB6,        //   Usage (Scan Previous Track)
+    0x09, 0xB7,        //   Usage (Stop)
+    0x09, 0xCD,        //   Usage (Play / Pause)
+    0x09, 0xE2,        //   Usage (Mute)
+    0x09, 0xE9,        //   Usage (Volume Up)
+    0x09, 0xEA,        //   Usage (Volume Down)
+    0x0A, 0x23, 0x02,  //   Usage (WWW Home)
+    0x0A, 0x94, 0x01,  //   Usage (My Computer)
+    0x0A, 0x92, 0x01,  //   Usage (Calculator)
+    0x0A, 0x2A, 0x02,  //   Usage (WWW fav)
+    0x0A, 0x21, 0x02,  //   Usage (WWW search)
+    0x0A, 0x26, 0x02,  //   Usage (WWW stop)
+    0x0A, 0x24, 0x02,  //   Usage (WWW back)
+    0x0A, 0x83, 0x01,  //   Usage (Media sel)
+    0x0A, 0x8A, 0x01,  //   Usage (Mail)
+    0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              // End Collection
+];
+
 pub fn enable_hid() -> Result<()>{
     println!("Enabling HID device");
 
@@ -116,6 +145,13 @@ pub fn enable_hid() -> Result<()>{
     fs::write("functions/hid.usb1/report_desc", MOUSE_REPORT_DESC)?;
     unix::fs::symlink("functions/hid.usb1", "configs/c.1/hid.usb1")?;
 
+    fs::create_dir_all("functions/hid.usb2")?;
+    fs::write("functions/hid.usb2/protocol", "1")?;
+    fs::write("functions/hid.usb2/subclass", "1")?;
+    fs::write("functions/hid.usb2/report_length", "2")?;
+    fs::write("functions/hid.usb2/report_desc", CONSUMER_REPORT_DESC)?;
+    unix::fs::symlink("functions/hid.usb2", "configs/c.1/hid.usb2")?;
+
     fs::write("os_desc/use", "1")?;
     fs::write("os_desc/b_vendor_code", "0xcd")?;
     fs::write("os_desc/qw_sign", "MSFT100")?;
@@ -147,11 +183,13 @@ pub fn disable_hid() -> Result<()>{
     fs::remove_file("os_desc/c.1")?;
     fs::remove_file("configs/c.1/hid.usb0")?;
     fs::remove_file("configs/c.1/hid.usb1")?;
+    fs::remove_file("configs/c.1/hid.usb2")?;
 
     fs::remove_dir("configs/c.1/strings/0x409")?;
     fs::remove_dir("configs/c.1")?;
     fs::remove_dir("functions/hid.usb0")?;
     fs::remove_dir("functions/hid.usb1")?;
+    fs::remove_dir("functions/hid.usb2")?;
     fs::remove_dir("strings/0x409")?;
 
     env::set_current_dir("..")?;
