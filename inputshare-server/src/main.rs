@@ -15,7 +15,7 @@ use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use vec_map::VecMap;
-use inputshare_common::{HidButtonCode, HidKeyCode, IDENTIFIER};
+use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
 /// The server for inputshare
@@ -109,8 +109,6 @@ fn server(args: Args) -> Result<()> {
             }
         }
 
-        consumer_device.press_key(1 << 5)?;
-        consumer_device.release_key(1 << 5)?;
         socket.update();
         loop {
             match socket.next_event(&mut buffer) {
@@ -138,6 +136,8 @@ fn server(args: Args) -> Result<()> {
                                     InputEvent::KeyRelease(key) => keyboard.release_key(key)?,
                                     InputEvent::MouseButtonPress(button) => mouse.press_button(button)?,
                                     InputEvent::MouseButtonRelease(button) => mouse.release_button(button)?,
+                                    InputEvent::ConsumerDevicePress(button) => consumer_device.press_key(button)?,
+                                    InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button)?,
                                     InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount)?,
                                     InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount)?,
                                     InputEvent::Reset => {
@@ -260,7 +260,7 @@ impl Keyboard {
 #[derive(Debug)]
 pub struct ConsumerDevice {
     device: File,
-    pressed_keys: u16,
+    pressed_keys: ConsumerDeviceButtons,
 }
 
 impl ConsumerDevice {
@@ -269,27 +269,37 @@ impl ConsumerDevice {
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2")?;
         Ok(Self {
             device,
-            pressed_keys: 0
+            pressed_keys: ConsumerDeviceButtons::empty()
         })
     }
 
     fn send_report(&mut self) -> std::io::Result<()> {
-        self.device.write_all(&self.pressed_keys.to_le_bytes())
+        self.device.write_all(&self.pressed_keys.bits().to_le_bytes())
     }
 
     pub fn reset(&mut self) -> std::io::Result<()> {
-        self.pressed_keys = 0;
+        self.pressed_keys = ConsumerDeviceButtons::empty();
         self.send_report()
     }
 
-    pub fn press_key(&mut self, key: u16) -> std::io::Result<()> {
-        self.pressed_keys |= key;
-        self.send_report()
+    pub fn press_key(&mut self, key: ConsumerDeviceCode) -> std::io::Result<()> {
+        match key.try_into() {
+            Ok(key) => {
+                self.pressed_keys.insert(key);
+                self.send_report()
+            },
+            Err(()) => Ok(())
+        }
     }
 
-    pub fn release_key(&mut self, key: u16) -> std::io::Result<()> {
-        self.pressed_keys &= !key;
-        self.send_report()
+    pub fn release_key(&mut self, key: ConsumerDeviceCode) -> std::io::Result<()> {
+        match key.try_into() {
+            Ok(key) => {
+                self.pressed_keys.remove(key);
+                self.send_report()
+            },
+            Err(()) => Ok(())
+        }
     }
 
 }
@@ -388,7 +398,7 @@ fn abs_min(a: i16, b: i16) -> i16 {
     }
 }
 
-pub use flags::{HidMouseButtons, HidModifierKeys};
+pub use flags::{HidMouseButtons, HidModifierKeys, ConsumerDeviceButtons};
 
 #[allow(non_upper_case_globals)]
 pub mod flags {
@@ -411,6 +421,51 @@ pub mod flags {
             const MButton = 0x04;
             const Button4 = 0x08;
             const Button5 = 0x10;
+        }
+
+        pub struct ConsumerDeviceButtons: u16 {
+            const NextTrack        = 0x0001;
+            const PreviousTrack    = 0x0002;
+            const Stop             = 0x0004;
+            const PlayPause        = 0x0008;
+            const Mute             = 0x0010;
+            const VolumeUp         = 0x0020;
+            const VolumeDown       = 0x0040;
+            const BrowserHome      = 0x0080;
+            const MyComputer       = 0x0100;
+            const Calculator       = 0x0200;
+            const BrowserFavorites = 0x0400;
+            const BrowserSearch    = 0x0800;
+            const BrowserStop      = 0x1000;
+            const BrowserBack      = 0x2000;
+            const MediaSelect      = 0x4000;
+            const Mail             = 0x8000;
+        }
+    }
+}
+
+impl TryFrom<ConsumerDeviceCode> for ConsumerDeviceButtons {
+    type Error = ();
+
+    fn try_from(value: ConsumerDeviceCode) -> std::result::Result<Self, Self::Error> {
+        match value {
+            ConsumerDeviceCode::NextTrack => Ok(ConsumerDeviceButtons::NextTrack),
+            ConsumerDeviceCode::PreviousTrack => Ok(ConsumerDeviceButtons::PreviousTrack),
+            ConsumerDeviceCode::Stop => Ok(ConsumerDeviceButtons::Stop),
+            ConsumerDeviceCode::PlayPause => Ok(ConsumerDeviceButtons::PlayPause),
+            ConsumerDeviceCode::Mute => Ok(ConsumerDeviceButtons::Mute),
+            ConsumerDeviceCode::VolumeUp => Ok(ConsumerDeviceButtons::VolumeUp),
+            ConsumerDeviceCode::VolumeDown => Ok(ConsumerDeviceButtons::VolumeDown),
+            ConsumerDeviceCode::MediaSelect => Ok(ConsumerDeviceButtons::MediaSelect),
+            ConsumerDeviceCode::Mail => Ok(ConsumerDeviceButtons::Mail),
+            ConsumerDeviceCode::Calculator => Ok(ConsumerDeviceButtons::Calculator),
+            ConsumerDeviceCode::MyComputer => Ok(ConsumerDeviceButtons::MyComputer),
+            ConsumerDeviceCode::BrowserSearch => Ok(ConsumerDeviceButtons::BrowserSearch),
+            ConsumerDeviceCode::BrowserHome => Ok(ConsumerDeviceButtons::BrowserHome),
+            ConsumerDeviceCode::BrowserBack => Ok(ConsumerDeviceButtons::BrowserBack),
+            ConsumerDeviceCode::BrowserStop => Ok(ConsumerDeviceButtons::BrowserStop),
+            ConsumerDeviceCode::BrowserFavorites => Ok(ConsumerDeviceButtons::BrowserFavorites),
+            _ => Err(())
         }
     }
 }

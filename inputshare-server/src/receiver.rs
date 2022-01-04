@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
+use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -11,6 +11,8 @@ pub enum InputEvent {
     KeyRelease(HidKeyCode),
     MouseButtonPress(HidButtonCode),
     MouseButtonRelease(HidButtonCode),
+    ConsumerDevicePress(ConsumerDeviceCode),
+    ConsumerDeviceRelease(ConsumerDeviceCode),
     HorizontalScrolling(i8),
     VerticalScrolling(i8),
     Reset,
@@ -63,6 +65,8 @@ impl InputReceiver {
                 Ok(MessageType::KeyRelease) => self.events.push_back(InputEvent::KeyRelease(HidKeyCode::from(msg_arg))),
                 Ok(MessageType::MouseButtonPress) => self.events.push_back(InputEvent::MouseButtonPress(HidButtonCode::from(msg_arg))),
                 Ok(MessageType::MouseButtonRelease) => self.events.push_back(InputEvent::MouseButtonRelease(HidButtonCode::from(msg_arg))),
+                Ok(MessageType::ConsumerDevicePress) => self.events.push_back(InputEvent::ConsumerDevicePress(ConsumerDeviceCode::from(msg_arg))),
+                Ok(MessageType::ConsumerDeviceRelease) => self.events.push_back(InputEvent::ConsumerDeviceRelease(ConsumerDeviceCode::from(msg_arg))),
                 Ok(MessageType::HorizontalScrolling) => self.events.push_back(InputEvent::HorizontalScrolling(msg_arg as i8)),
                 Ok(MessageType::VerticalScrolling) => self.events.push_back(InputEvent::VerticalScrolling(msg_arg as i8)),
                 Ok(MessageType::Reset) => self.events.push_back(InputEvent::Reset),

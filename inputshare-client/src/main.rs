@@ -268,7 +268,10 @@ impl<'a> InputTransmitter<'a> {
                                     KeyState::Released => sender.release_key(kc)
                                 },
                                 None => match wsc_to_cdc(sc){
-                                    Some(cdc) => println!("{:?}", cdc),
+                                    Some(cdc) => match ks {
+                                        KeyState::Pressed => sender.press_consumer_device(cdc),
+                                        KeyState::Released => sender.release_consumer_device(cdc)
+                                    },
                                     None => if! matches!(sc, 0x21d) {
                                         println!("Unknown key: {} ({:x})", vk, sc)
                                     }
