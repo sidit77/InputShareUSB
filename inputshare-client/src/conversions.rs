@@ -1,17 +1,17 @@
-use inputshare_common::{HidKeyCode, HidMouseButton};
+use inputshare_common::{HidButtonCode, HidKeyCode};
 use yawi::{WindowsScanCode, VirtualKey};
 
 pub fn f32_to_i8(v: f32) -> i8 {
      v.round().clamp(i8::MIN as f32, i8::MAX as f32) as i8
 }
 
-pub fn vk_to_mb(key: VirtualKey) -> Option<HidMouseButton> {
+pub fn vk_to_mb(key: VirtualKey) -> Option<HidButtonCode> {
     match key {
-        VirtualKey::LButton  => Some(HidMouseButton::LButton),
-        VirtualKey::RButton  => Some(HidMouseButton::RButton),
-        VirtualKey::MButton  => Some(HidMouseButton::MButton),
-        VirtualKey::XButton1 => Some(HidMouseButton::Button4),
-        VirtualKey::XButton2 => Some(HidMouseButton::Button5),
+        VirtualKey::LButton  => Some(HidButtonCode::LButton),
+        VirtualKey::RButton  => Some(HidButtonCode::RButton),
+        VirtualKey::MButton  => Some(HidButtonCode::MButton),
+        VirtualKey::XButton1 => Some(HidButtonCode::Button4),
+        VirtualKey::XButton2 => Some(HidButtonCode::Button5),
         _                    => None
     }
 }

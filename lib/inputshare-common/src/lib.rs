@@ -16,14 +16,13 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
     }
 }
 
-pub use flags::{HidMouseButton, HidModifierKeys};
+pub use flags::{HidMouseButtons, HidModifierKeys};
 
 #[allow(non_upper_case_globals)]
 pub mod flags {
     use bitflags::bitflags;
     bitflags! {
         pub struct HidModifierKeys: u8 {
-            const None    = 0x00;
             const LCtrl   = 0x01;
             const LShift  = 0x02;
             const LAlt    = 0x04;
@@ -34,8 +33,7 @@ pub mod flags {
             const RMeta   = 0x80;
         }
 
-        pub struct HidMouseButton: u8 {
-            const None    = 0x00;
+        pub struct HidMouseButtons: u8 {
             const LButton = 0x01;
             const RButton = 0x02;
             const MButton = 0x04;
@@ -56,6 +54,33 @@ pub enum MessageType {
     HorizontalScrolling,
     VerticalScrolling,
     Reset
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
+#[repr(u8)]
+pub enum HidButtonCode {
+    #[num_enum(default)]
+    None = 0x00,
+    LButton = 0x01,
+    RButton = 0x02,
+    MButton = 0x03,
+    Button4 = 0x04,
+    Button5 = 0x05
+}
+
+impl TryFrom<HidButtonCode> for HidMouseButtons {
+    type Error = ();
+
+    fn try_from(value: HidButtonCode) -> Result<Self, Self::Error> {
+        match value {
+            HidButtonCode::None => Err(()),
+            HidButtonCode::LButton => Ok(HidMouseButtons::LButton),
+            HidButtonCode::RButton => Ok(HidMouseButtons::RButton),
+            HidButtonCode::MButton => Ok(HidMouseButtons::MButton),
+            HidButtonCode::Button4 => Ok(HidMouseButtons::Button4),
+            HidButtonCode::Button5 => Ok(HidMouseButtons::Button5)
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]

@@ -15,7 +15,7 @@ use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use vec_map::VecMap;
-use inputshare_common::{HidKeyCode, HidModifierKeys, HidMouseButton, IDENTIFIER};
+use inputshare_common::{HidButtonCode, HidKeyCode, HidModifierKeys, HidMouseButtons, IDENTIFIER};
 use crate::receiver::{InputEvent, InputReceiver};
 
 /// The server for inputshare
@@ -255,7 +255,7 @@ impl Keyboard {
 #[derive(Debug)]
 pub struct Mouse {
     device: File,
-    pressed_buttons: HidMouseButton,
+    pressed_buttons: HidMouseButtons,
     tess_factor: i16
 }
 
@@ -265,7 +265,7 @@ impl Mouse {
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
         Ok(Self {
             device,
-            pressed_buttons: HidMouseButton::empty(),
+            pressed_buttons: HidMouseButtons::empty(),
             tess_factor: i16::from(tess_factor.get())
         })
     }
@@ -283,18 +283,28 @@ impl Mouse {
     }
 
     pub fn reset(&mut self) -> std::io::Result<()> {
-        self.pressed_buttons = HidMouseButton::empty();
+        self.pressed_buttons = HidMouseButtons::empty();
         self.send_report(0,0,0,0)
     }
 
-    pub fn press_button(&mut self, button: HidMouseButton) -> std::io::Result<()> {
-        self.pressed_buttons.insert(button);
-        self.send_report(0, 0,0,0)
+    pub fn press_button(&mut self, button: HidButtonCode) -> std::io::Result<()> {
+        match button.try_into() {
+            Ok(button) => {
+                self.pressed_buttons.insert(button);
+                self.send_report(0, 0,0,0)
+            },
+            Err(_) => Ok(())
+        }
     }
 
-    pub fn release_button(&mut self, button: HidMouseButton) -> std::io::Result<()> {
-        self.pressed_buttons.remove(button);
-        self.send_report(0, 0,0,0)
+    pub fn release_button(&mut self, button: HidButtonCode) -> std::io::Result<()> {
+        match button.try_into() {
+            Ok(button) => {
+                self.pressed_buttons.remove(button);
+                self.send_report(0, 0,0,0)
+            },
+            Err(_) => Ok(())
+        }
     }
 
     pub fn move_by(&mut self, mut dx: i16, mut dy: i16) -> std::io::Result<()> {

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use inputshare_common::{HidKeyCode, HidMouseButton, MessageType, Vec2};
+use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, Vec2};
 use std::io::{Result, Write};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -55,12 +55,12 @@ impl InputSender {
         self.message_queue.push_back([MessageType::KeyRelease.into(), key.into()])
     }
 
-    pub fn press_mouse_button(&mut self, button: HidMouseButton) {
-        self.message_queue.push_back([MessageType::MouseButtonPress.into(), button.bits()])
+    pub fn press_mouse_button(&mut self, button: HidButtonCode) {
+        self.message_queue.push_back([MessageType::MouseButtonPress.into(), button.into()])
     }
 
-    pub fn release_mouse_button(&mut self, button: HidMouseButton) {
-        self.message_queue.push_back([MessageType::MouseButtonRelease.into(), button.bits()])
+    pub fn release_mouse_button(&mut self, button: HidButtonCode) {
+        self.message_queue.push_back([MessageType::MouseButtonRelease.into(), button.into()])
     }
 
     pub fn scroll_horizontal(&mut self, amount: i8) {
