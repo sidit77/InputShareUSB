@@ -132,7 +132,7 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
     if code >= 0 {
         let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
 
-        if !nhook.ignore_injected || key_struct.flags & LLKHF_INJECTED == 0 {
+        if !nhook.ignore_injected || !parse_injected(&key_struct) {
 
             let event = match parse_virtual_key(&key_struct) {
                 Some(key) => match parse_key_state(wparam) {
@@ -201,6 +201,12 @@ fn parse_xbutton(key_struct: &MSLLHOOKSTRUCT) -> Option<VirtualKey>{
         winapi::um::winuser::XBUTTON2 => Some(VirtualKey::XButton2),
         _ => None
     }
+}
+
+fn parse_injected(key_struct: &KBDLLHOOKSTRUCT) -> bool {
+    // Workaround because some keys (e.g play/pause) are flagged as injected even if they arent.
+    // However injected keys don't seem to have the extended flag so this is used to remove these false positives
+    key_struct.flags & LLKHF_INJECTED != 0 && key_struct.flags & LLKHF_EXTENDED == 0
 }
 
 fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
