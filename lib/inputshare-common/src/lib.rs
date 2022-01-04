@@ -60,12 +60,14 @@ pub enum MessageType {
     Reset
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
 pub enum HidKeyCode {
     #[num_enum(default)]
     None = 0x00,
-    ErrOvf = 0x01,
+    ErrorRollOver = 0x01,
+    PostFail = 0x02,
+    ErrorUndefined = 0x03,
 
     KeyA = 0x04,
     KeyB = 0x05,
@@ -137,7 +139,7 @@ pub enum HidKeyCode {
     F11 = 0x44,
     F12 = 0x45,
 
-    Sysrq = 0x46,
+    PrintScreen = 0x46,
     ScrollLock = 0x47,
     Pause = 0x48,
     Insert = 0x49,
@@ -154,7 +156,7 @@ pub enum HidKeyCode {
     NumLock = 0x53,
     KpSlash = 0x54,
     KpAsterisk = 0x55,
-    Kpminus = 0x56,
+    KpMinus = 0x56,
     KpPlus = 0x57,
     KpEnter = 0x58,
     Kp1 = 0x59,
@@ -187,10 +189,10 @@ pub enum HidKeyCode {
     F23 = 0x72,
     F24 = 0x73,
 
-    Open = 0x74,
+    Execute = 0x74,
     Help = 0x75,
-    Props = 0x76,
-    Front = 0x77,
+    Menu = 0x76,
+    Select = 0x77,
     Stop = 0x78,
     Again = 0x79,
     Undo = 0x7a,
@@ -208,22 +210,39 @@ pub enum HidKeyCode {
 
     KpComma = 0x85,
     KpEqualSign = 0x86,
-    Ro = 0x87,
-    Katakanahiragana = 0x88,
-    Yen = 0x89,
-    Henkan = 0x8a,
-    Muhenkan = 0x8b,
-    Kpjpcomma = 0x8c,
+    International1 = 0x87,
+    International2 = 0x88,
+    International3 = 0x89,
+    International4 = 0x8a,
+    International5 = 0x8b,
+    International6 = 0x8c,
     International7 = 0x8d,
     International8 = 0x8e,
     International9 = 0x8f,
-    Hangeul = 0x90,
-    Hanja = 0x91,
-    Katakana = 0x92,
-    Hiragana = 0x93,
-    Zenkakuhankaku = 0x94,
+    Language1  = 0x90,
+    Language2 = 0x91,
+    Language3 = 0x92,
+    Language4 = 0x93,
+    Language5 = 0x94,
+    Language6 = 0x95,
+    Language7 = 0x96,
+    Language8 = 0x97,
+    Language9 = 0x98,
 
+    AltErase = 0x99,
+    SysReq = 0x9a,
+    Cancel = 0x9b,
+    Clear = 0x9c,
+    Prior = 0x9d,
+    Return = 0x9e,
+    Separator = 0x9f,
+    Out = 0xa0,
+    Oper = 0xa1,
+    ClearAgain = 0xa2,
+    CrSel = 0xa3,
+    ExSel = 0xa4,
 
+    // According to QMK, 0xA5-0xDF are not usable on modern keyboards
 
     LeftCtrl = 0xe0,
     LeftShift = 0xe1,
@@ -234,6 +253,7 @@ pub enum HidKeyCode {
     RightAlt = 0xe6,
     RightMeta = 0xe7,
 
+    // Unofficial
     MediaPlayPause = 0xe8,
     MediaStopCD = 0xe9,
     MediaPreviousSong = 0xea,
@@ -254,4 +274,12 @@ pub enum HidKeyCode {
     MediaCoffee = 0xf9,
     MediaRefresh = 0xfa,
     MediaCalc = 0xfb,
+}
+
+impl HidKeyCode {
+
+    pub fn valid(self) -> bool {
+        !matches!(self, HidKeyCode::None | HidKeyCode::ErrorRollOver | HidKeyCode::PostFail | HidKeyCode::ErrorUndefined)
+    }
+
 }
