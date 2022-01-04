@@ -1,9 +1,7 @@
 use std::collections::VecDeque;
-use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, Vec2};
+use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
 use std::io::{Result, Write};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
-type MouseType = i64;
 
 #[derive(Debug)]
 pub struct InputSender {

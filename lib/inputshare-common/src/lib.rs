@@ -15,6 +15,7 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
     }
 }
 
+pub type MouseType = i64;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]

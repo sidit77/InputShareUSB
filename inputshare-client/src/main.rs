@@ -38,7 +38,7 @@ fn main() -> Result<()>{
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
-    if std::env::args().find(|arg| arg == "print_keys").is_some() {
+    if std::env::args().any(|arg| arg == "print_keys") {
         return run_key_tester()
     }
 

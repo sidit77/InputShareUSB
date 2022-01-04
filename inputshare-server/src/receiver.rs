@@ -1,10 +1,8 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, Vec2};
+use inputshare_common::{HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
 use std::io::Result;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
-type MouseType = i64;
 
 #[derive(Debug, Copy, Clone)]
 pub enum InputEvent {
