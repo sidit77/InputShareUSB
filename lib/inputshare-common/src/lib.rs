@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::fmt::Debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
@@ -16,33 +15,6 @@ impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
     }
 }
 
-pub use flags::{HidMouseButtons, HidModifierKeys};
-
-#[allow(non_upper_case_globals)]
-pub mod flags {
-    use bitflags::bitflags;
-    bitflags! {
-        pub struct HidModifierKeys: u8 {
-            const LCtrl   = 0x01;
-            const LShift  = 0x02;
-            const LAlt    = 0x04;
-            const LMeta   = 0x08;
-            const RCtrl   = 0x10;
-            const RShift  = 0x20;
-            const RAlt    = 0x40;
-            const RMeta   = 0x80;
-        }
-
-        pub struct HidMouseButtons: u8 {
-            const LButton = 0x01;
-            const RButton = 0x02;
-            const MButton = 0x04;
-            const Button4 = 0x08;
-            const Button5 = 0x10;
-        }
-    }
-
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
@@ -66,21 +38,6 @@ pub enum HidButtonCode {
     MButton = 0x03,
     Button4 = 0x04,
     Button5 = 0x05
-}
-
-impl TryFrom<HidButtonCode> for HidMouseButtons {
-    type Error = ();
-
-    fn try_from(value: HidButtonCode) -> Result<Self, Self::Error> {
-        match value {
-            HidButtonCode::None => Err(()),
-            HidButtonCode::LButton => Ok(HidMouseButtons::LButton),
-            HidButtonCode::RButton => Ok(HidMouseButtons::RButton),
-            HidButtonCode::MButton => Ok(HidMouseButtons::MButton),
-            HidButtonCode::Button4 => Ok(HidMouseButtons::Button4),
-            HidButtonCode::Button5 => Ok(HidMouseButtons::Button5)
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]
@@ -297,22 +254,4 @@ pub enum HidKeyCode {
     MediaCoffee = 0xf9,
     MediaRefresh = 0xfa,
     MediaCalc = 0xfb,
-}
-
-impl TryFrom<HidKeyCode> for HidModifierKeys {
-    type Error = ();
-
-    fn try_from(value: HidKeyCode) -> Result<Self, Self::Error> {
-        match value {
-            HidKeyCode::LeftCtrl   => Ok(HidModifierKeys::LCtrl),
-            HidKeyCode::LeftShift  => Ok(HidModifierKeys::LShift),
-            HidKeyCode::LeftAlt    => Ok(HidModifierKeys::LAlt),
-            HidKeyCode::LeftMeta   => Ok(HidModifierKeys::LMeta),
-            HidKeyCode::RightCtrl  => Ok(HidModifierKeys::RCtrl),
-            HidKeyCode::RightShift => Ok(HidModifierKeys::RShift),
-            HidKeyCode::RightAlt   => Ok(HidModifierKeys::RAlt),
-            HidKeyCode::RightMeta  => Ok(HidModifierKeys::RMeta),
-            _ => Err(())
-        }
-    }
 }

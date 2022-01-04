@@ -155,7 +155,6 @@ dependencies = [
 name = "inputshare-common"
 version = "2.0.0"
 dependencies = [
- "bitflags",
  "num_enum",
 ]
 
@@ -164,6 +163,7 @@ name = "inputshare-server"
 version = "2.1.1"
 dependencies = [
  "anyhow",
+ "bitflags",
  "byteorder",
  "clap",
  "inputshare-common",
