@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-pub const IDENTIFIER: &str = "inputshare-usb";
+pub const IDENTIFIER: &str = concat!(env!("CARGO_CRATE_NAME"), "_" ,env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Vec2<T> where T: Debug + Copy + PartialEq {
