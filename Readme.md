@@ -69,7 +69,7 @@ The binary will be in `/target/release/inputshare-client.exe`
 
 During the first run the client will generate a config file called `inputshare-client.json`. The config file  contains the following options:
 
-* `host_address`: The address of the raspberry pi that runs the sever
+* `host_address` (**Important**): The address of the raspberry pi that runs the sever
 * `hotkey`: The hotkey that toggles input between the local and remote pc. The hotkey has two parts: the trigger key which triggers the swap and a variable amount of modifier keys which also have to be pressed for the trigger to work. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
 * `blacklist`: All keys included in in this list will be ignored by the client. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
 * `show_network_info`: When set to `true` the client will display the round-trip-time and packet loss to the server. This call also be toggled at runtime by pressing `F1`.
