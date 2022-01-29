@@ -5,4 +5,4 @@ rustflags = ["-Ctarget-feature=+crt-static"]
 rustflags = ["-Ctarget-feature=+crt-static"]
 
 [target.'cfg(target_os = "linux")']
-rustflags = ["-C", "strip=symbols"]
+rustflags = ["-Cstrip=symbols"]
