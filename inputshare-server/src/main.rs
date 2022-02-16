@@ -143,6 +143,7 @@ fn server(args: Args) -> Result<()> {
                                     InputEvent::Reset => {
                                         keyboard.reset()?;
                                         mouse.reset()?;
+                                        consumer_device.reset()?;
                                     }
                                 }
                                 last_input = Instant::now();
