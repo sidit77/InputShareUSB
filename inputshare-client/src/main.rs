@@ -9,13 +9,14 @@ use native_windows_gui as nwg;
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashSet;
 use std::fmt::Arguments;
-use std::fs;
+use std::{fs, thread};
 use std::io::{Cursor, ErrorKind, Write};
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::ops::Deref;
 use std::path::Path;
 use std::ptr::null_mut;
 use std::rc::Rc;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
@@ -46,10 +47,6 @@ fn main() -> Result<()>{
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
-    if std::env::args().any(|arg| arg == "print_keys") {
-        return run_key_tester()
-    }
-
     match client() {
         Ok(_) => Ok(()),
         Err(e) => {
@@ -75,6 +72,7 @@ fn client() -> Result<()> {
     let mut socket = Client::new(socket, IDENTIFIER);
     log::info!("Running on {}", socket.local_addr()?);
 
+    let mut dialog: Option<JoinHandle<Result<()>>> = None;
     let mut last_network_label_update = Instant::now();
     let mut last_socket_update = Instant::now();
     let mut last_send = Instant::now();
@@ -84,6 +82,14 @@ fn client() -> Result<()> {
             Some(ref transmitter) if !transmitter.sender().in_sync() => Duration::from_secs_f32(1.0 / config.network_send_rate as f32),
             _ => Duration::from_millis(500)
         }))?;
+        if let Some(handle) = dialog.take() {
+            if handle.is_finished() {
+                handle.join().unwrap()?;
+                app.set_enabled(true);
+            } else {
+                dialog = Some(handle)
+            }
+        }
         let mut socket_message = false;
         while let Some(msg) = get_message() {
             match app.handle_event(&msg) {
@@ -92,7 +98,8 @@ fn client() -> Result<()> {
                     app.show_network_info_enabled(config.show_network_info);
                 },
                 Some(GuiEvent::KeyTester) => {
-                    log::info!("Key Tester");
+                    app.set_enabled(false);
+                    dialog = Some(thread::spawn(|| run_key_tester()));
                 },
                 Some(GuiEvent::ShutdownServer) => {
                     log::info!("Shutdown");

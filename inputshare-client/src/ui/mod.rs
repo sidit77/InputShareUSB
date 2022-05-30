@@ -79,6 +79,10 @@ impl InputShareApp {
         self.window.handle.hwnd().unwrap()
     }
 
+    pub fn set_enabled(&self, enabled: bool) {
+        self.window.set_enabled(enabled);
+    }
+
     pub fn show_network_info_enabled(&self, enabled: bool) {
         self.network_info_toggle.set_checked(enabled);
         self.info_label.set_visible(enabled);

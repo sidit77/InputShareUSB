@@ -23,7 +23,7 @@ pub struct KeyTester {
 }
 
 pub fn run_key_tester() -> Result<()> {
-    let app = KeyTester::build_ui(Default::default()).expect("Failed to build UI");
+    let app = KeyTester::build_ui(Default::default())?;
     let mut pressed_keys = HashSet::new();
     let _h = InputHook::new(move |event|{
         if let Some(event) = event.to_key_event() {
