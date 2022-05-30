@@ -14,6 +14,7 @@ use clap::Parser;
 use log::LevelFilter;
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
+use system_shutdown::shutdown;
 use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
 use vec_map::VecMap;
 use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode, IDENTIFIER};
@@ -53,10 +54,15 @@ fn main() -> Result<()>{
 
     configfs::disable_hid()?;
 
-    result
+    if result? {
+        log::info!("Attempting the shutdown the OS as well...");
+        shutdown()?;
+    }
+
+    Ok(())
 }
 
-fn server(args: Args) -> Result<()> {
+fn server(args: Args) -> Result<bool> {
     log::info!("Opening HID devices");
 
     let mut mouse = Mouse::new(args.mouse_tesselation_factor.try_into()?)?;
@@ -77,6 +83,7 @@ fn server(args: Args) -> Result<()> {
 
     log::info!("Started server on {}", socket.local_addr()?);
 
+    let mut shutdown_raspberry = false;
     let mut last_input = Instant::now();
     let mut idle_move_x = -10;
     let mut receivers = VecMap::new();
@@ -155,7 +162,10 @@ fn server(args: Args) -> Result<()> {
                                         mouse.reset()?;
                                         consumer_device.reset()?;
                                     },
-                                    InputEvent::Shutdown => log::info!("Shutdown")
+                                    InputEvent::Shutdown => {
+                                        shutdown_raspberry = true;
+                                        break 'outer;
+                                    }
                                 }
                                 last_input = Instant::now();
                                 // println!("{:?}", event);
@@ -185,7 +195,7 @@ fn server(args: Args) -> Result<()> {
 
     log::info!("Shutting down");
 
-    Ok(())
+    Ok(shutdown_raspberry)
 }
 
 struct MioSocket(UdpSocket);

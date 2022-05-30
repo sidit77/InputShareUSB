@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "inputshare-client"
-version = "2.2.1"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -169,14 +169,14 @@ dependencies = [
 
 [[package]]
 name = "inputshare-common"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "num_enum",
 ]
 
 [[package]]
 name = "inputshare-server"
-version = "2.3.1"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -187,6 +187,7 @@ dependencies = [
  "log",
  "mio",
  "mio-signals",
+ "system_shutdown",
  "udp_connections",
  "vec_map",
 ]
@@ -505,6 +506,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "system_shutdown"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "035e081d603551d8d78db27d2232913269c749ea67648c369100049820406a14"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
