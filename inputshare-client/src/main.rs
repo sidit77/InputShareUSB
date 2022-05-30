@@ -20,6 +20,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
+use log::LevelFilter;
 use native_windows_gui::NativeUi;
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
@@ -36,6 +37,13 @@ const CONNECT: u32 = WM_USER + 2;
 const TOGGLED: u32 = WM_USER + 3;
 
 fn main() -> Result<()>{
+    env_logger::builder()
+        .filter_level(LevelFilter::Debug)
+        .format_timestamp(None)
+        //.format_target(false)
+        .parse_default_env()
+        .init();
+
     nwg::init().expect("Failed to init Native Windows GUI");
     nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
@@ -66,7 +74,7 @@ fn client() -> Result<()> {
     socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
 
     let mut socket = Client::new(socket, IDENTIFIER);
-    println!("Running on {}", socket.local_addr()?);
+    log::info!("Running on {}", socket.local_addr()?);
 
     let mut last_network_label_update = Instant::now();
     let mut last_socket_update = Instant::now();
@@ -127,14 +135,14 @@ fn client() -> Result<()> {
             while let Some(event) = socket.next_event(&mut buffer)? {
                 match event {
                     ClientEvent::Connected(id) => {
-                        println!("Connected as {}", id);
+                        log::info!("Connected as {}", id);
                         input_transmitter = Some(InputTransmitter::new(&config)?);
                         app.connect_button.set_text("Disconnect");
                         app.connect_button.set_enabled(true);
                         app.set_status(StatusText::Local);
                     },
                     ClientEvent::Disconnected(reason) => {
-                        println!("Disconnected: {:?}", reason);
+                        log::info!("Disconnected: {:?}", reason);
                         input_transmitter = None;
                         if !matches!(reason, ClientDisconnectReason::Disconnected) {
                             app.show_error(format_buf!(&mut buffer, "Disconnected: {:?}", reason)?);
@@ -147,7 +155,7 @@ fn client() -> Result<()> {
                         if latest {
                             if let Some(ref mut transmitter) = input_transmitter {
                                 transmitter.sender_mut().read_packet(payload)
-                                    .unwrap_or_else(|e|println!("Packet decode error: {}", e));
+                                    .unwrap_or_else(|e|log::error!("Packet decode error: {}", e));
                             }
                         }
                     },
@@ -179,7 +187,7 @@ fn client() -> Result<()> {
         socket.disconnect()?;
     }
 
-    println!("Shutdown");
+    log::info!("Shutdown");
 
     Ok(())
 }
@@ -244,7 +252,7 @@ impl<'a> InputTransmitter<'a> {
                                         .map(|k| match k.is_mouse_button() {
                                             true => Input::MouseButtonInput(k, KeyState::Released),
                                             false => Input::KeyboardKeyInput(k, KeyState::Released),
-                                        })).unwrap_or_else(|e| println!("{}", e));
+                                        })).unwrap_or_else(|e| log::error!("{}", e));
                                 }
                                 captured = !captured;
                                 unsafe {
@@ -275,7 +283,7 @@ impl<'a> InputTransmitter<'a> {
                                         KeyState::Released => sender.release_consumer_device(cdc)
                                     },
                                     None => if! matches!(sc, 0x21d) {
-                                        println!("Unknown key: {} ({:x})", vk, sc)
+                                        log::warn!("Unknown key: {} ({:x})", vk, sc)
                                     }
                                 }
                             }
@@ -284,7 +292,7 @@ impl<'a> InputTransmitter<'a> {
                                     KeyState::Pressed => sender.press_mouse_button(button),
                                     KeyState::Released => sender.release_mouse_button(button)
                                 },
-                                None => println!("Unknown mouse button: {}", mb)
+                                None => log::warn!("Unknown mouse button: {}", mb)
                             }
                             InputEvent::MouseWheelEvent(sd) => match sd {
                                 ScrollDirection::Horizontal(amount) => sender.scroll_horizontal(f32_to_i8(amount)),

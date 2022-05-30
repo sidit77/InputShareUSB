@@ -39,7 +39,7 @@ pub fn run_key_tester() -> Result<()> {
             }
         }
         if let InputEvent::KeyboardKeyEvent(_, sc, _) = event {
-            println!("{:?} {:?}", event, wsc_to_hkc(sc));
+            log::info!("{:?} {:?}", event, wsc_to_hkc(sc));
         }
         true
     }, true, HookType::KeyboardMouse)?;

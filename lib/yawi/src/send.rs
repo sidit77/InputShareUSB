@@ -58,7 +58,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                     (VirtualKey::XButton1, KeyState::Released) => MOUSEEVENTF_XUP,
                     (VirtualKey::XButton2, KeyState::Pressed ) => MOUSEEVENTF_XDOWN,
                     (VirtualKey::XButton2, KeyState::Released) => MOUSEEVENTF_XUP,
-                    _ => {println!("Unsupported key ({:?}): Skipping!", key); MOUSEEVENTF_WHEEL}
+                    _ => {log::warn!("Unsupported key ({:?}): Skipping!", key); MOUSEEVENTF_WHEEL}
                 },
                 time: 0,
                 dwExtraInfo: 0

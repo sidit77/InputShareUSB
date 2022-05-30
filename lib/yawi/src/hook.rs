@@ -30,7 +30,7 @@ impl NativeHook {
         } else {
             None
         };
-        println!("Registered native hooks!");
+        log::debug!("Registered native hooks!");
         Ok(Self {
             keyboard,
             mouse,
@@ -58,7 +58,7 @@ impl Drop for NativeHook {
                 UnhookWindowsHookEx(hook);
             }
         }
-        println!("Unregistered native hooks!");
+        log::debug!("Unregistered native hooks!");
     }
 }
 
@@ -137,9 +137,9 @@ unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPAR
             let event = match parse_virtual_key(&key_struct) {
                 Some(key) => match parse_key_state(wparam) {
                     Some(state) => Some(InputEvent::KeyboardKeyEvent(key, parse_scancode(&key_struct), state)),
-                    None => {println!("Unknown event: {}", wparam); None}
+                    None => {log::warn!("Unknown event: {}", wparam); None}
                 }
-                None => {println!("Unknown key: {}", key_struct.vkCode); None}
+                None => {log::warn!("Unknown key: {}", key_struct.vkCode); None}
             };
 
             if let Some(event) = event {
@@ -175,7 +175,7 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
                 winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
                 winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
                 winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
-                _ => {println!("Unknown: {}", wparam); None}
+                _ => {log::warn!("Unknown: {}", wparam); None}
             };
 
             if let Some(event) = event {
