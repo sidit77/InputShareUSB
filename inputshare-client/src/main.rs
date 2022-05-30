@@ -28,7 +28,7 @@ use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::sender::InputSender;
-use crate::ui::{GuiEvent, InputShareApp, run_key_tester, StatusText};
+use crate::ui::{ConnectionState, GuiEvent, InputShareApp, run_key_tester, StatusText};
 use crate::windows::{get_message, wait_message_timeout};
 
 const SOCKET: u32 = WM_USER + 1;
@@ -70,7 +70,7 @@ fn client() -> Result<()> {
     app.show_network_info_enabled(config.show_network_info);
 
     let socket = UdpSocket::bind(Endpoint::remote_any())?;
-    socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
+    socket.notify(app.handle(), SOCKET, NetworkEvents::Read)?;
 
     let mut socket = Client::new(socket, IDENTIFIER);
     log::info!("Running on {}", socket.local_addr()?);
@@ -114,8 +114,7 @@ fn client() -> Result<()> {
                             Ok(mut addrs) => match addrs.find(|x| x.is_ipv4()) {
                                 Some(addrs) => {
                                     socket.connect(addrs);
-                                    app.connect_button.set_text("Connecting...");
-                                    app.connect_button.set_enabled(false);
+                                    app.set_connection_state(ConnectionState::Connecting);
                                 },
                                 None => {
                                     app.show_error("Could not find address");
@@ -128,8 +127,7 @@ fn client() -> Result<()> {
                     }
                     if socket.is_connected() {
                         socket.disconnect()?;
-                        app.connect_button.set_text("Disconnecting...");
-                        app.connect_button.set_enabled(false);
+                        app.set_connection_state(ConnectionState::Disconnecting);
                     }
                     socket_message = true;
                 }
@@ -145,8 +143,7 @@ fn client() -> Result<()> {
                     ClientEvent::Connected(id) => {
                         log::info!("Connected as {}", id);
                         input_transmitter = Some(InputTransmitter::new(&config)?);
-                        app.connect_button.set_text("Disconnect");
-                        app.connect_button.set_enabled(true);
+                        app.set_connection_state(ConnectionState::Connected);
                         app.set_status(StatusText::Local);
                     },
                     ClientEvent::Disconnected(reason) => {
@@ -155,8 +152,7 @@ fn client() -> Result<()> {
                         if !matches!(reason, ClientDisconnectReason::Disconnected) {
                             app.show_error(format_buf!(&mut buffer, "Disconnected: {:?}", reason)?);
                         }
-                        app.connect_button.set_text("Connect");
-                        app.connect_button.set_enabled(true);
+                        app.set_connection_state(ConnectionState::Disconnected);
                         app.set_status(StatusText::NotConnected);
                     },
                     ClientEvent::PacketReceived(latest, payload) => {

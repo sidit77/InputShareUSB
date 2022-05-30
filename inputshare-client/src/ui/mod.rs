@@ -21,7 +21,7 @@ pub struct InputShareApp {
     #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE|MINIMIZE_BOX",
     icon: Some(&nwg::EmbedResource::load(None)?.icon(1, None).unwrap()))]
     #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
-    pub window: nwg::Window,
+    window: nwg::Window,
 
     #[nwg_control()]
     system_menu: SystemMenu,
@@ -43,39 +43,11 @@ pub struct InputShareApp {
     info_label: nwg::Label,
 
     #[nwg_control(text: "Not Connected", size: (240, 45), position: (30, 10), flags: "VISIBLE|DISABLED")]
-    pub status_label: nwg::RichLabel,
+    status_label: nwg::RichLabel,
 
     #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
     #[nwg_events( OnButtonClick: [InputShareApp::connect_button_press] )]
-    pub connect_button: nwg::Button,
-
-
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum StatusText {
-    Local,
-    Remote,
-    NotConnected
-}
-
-impl StatusText {
-
-    fn text(self) -> &'static str{
-        match self {
-            StatusText::Local => "Local",
-            StatusText::Remote => "Remote",
-            StatusText::NotConnected => "Not Connected",
-        }
-    }
-
-    fn color(self) -> [u8; 3] {
-        match self {
-            StatusText::Local => [60, 140, 255],
-            StatusText::Remote => [255, 80, 100],
-            StatusText::NotConnected => [150, 150, 150],
-        }
-    }
+    connect_button: nwg::Button,
 
 }
 
@@ -103,6 +75,10 @@ impl InputShareApp {
         }
     }
 
+    pub fn handle(&self) -> HWND {
+        self.window.handle.hwnd().unwrap()
+    }
+
     pub fn show_network_info_enabled(&self, enabled: bool) {
         self.network_info_toggle.set_checked(enabled);
         self.info_label.set_visible(enabled);
@@ -114,6 +90,13 @@ impl InputShareApp {
 
     pub fn connect_button_press(&self) {
         unsafe { PostMessageW(null_mut(), CONNECT, 0, 0); }
+    }
+
+    pub fn set_connection_state(&self, state: ConnectionState) {
+        self.connect_button.set_text(state.text());
+        self.connect_button.set_enabled(matches!(state, ConnectionState::Connected | ConnectionState::Disconnected));
+        self.key_tester_button.set_enabled(matches!(state, ConnectionState::Disconnected));
+        self.shutdown_pi_button.set_enabled(matches!(state, ConnectionState::Connected));
     }
 
     pub fn set_status(&self, status: StatusText) {
@@ -141,6 +124,55 @@ impl InputShareApp {
     }
 
 }
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum StatusText {
+    Local,
+    Remote,
+    NotConnected
+}
+
+impl StatusText {
+
+    fn text(self) -> &'static str{
+        match self {
+            StatusText::Local => "Local",
+            StatusText::Remote => "Remote",
+            StatusText::NotConnected => "Not Connected",
+        }
+    }
+
+    fn color(self) -> [u8; 3] {
+        match self {
+            StatusText::Local => [60, 140, 255],
+            StatusText::Remote => [255, 80, 100],
+            StatusText::NotConnected => [150, 150, 150],
+        }
+    }
+
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ConnectionState {
+    Connecting,
+    Connected,
+    Disconnecting,
+    Disconnected
+}
+
+impl ConnectionState {
+
+    fn text(self) -> &'static str{
+        match self {
+            ConnectionState::Connecting => "Connecting...",
+            ConnectionState::Connected => "Disconnect",
+            ConnectionState::Disconnecting => "Disconnecting...",
+            ConnectionState::Disconnected => "Connect"
+        }
+    }
+
+}
+
 
 trait ControlHandleExt {
     fn matches_hwnd(self, hwnd: HWND) -> bool;
