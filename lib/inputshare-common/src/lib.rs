@@ -28,7 +28,8 @@ pub enum MessageType {
     ConsumerDeviceRelease,
     HorizontalScrolling,
     VerticalScrolling,
-    Reset
+    Reset,
+    Shutdown
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IntoPrimitive, FromPrimitive)]

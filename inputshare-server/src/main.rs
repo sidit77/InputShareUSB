@@ -154,7 +154,8 @@ fn server(args: Args) -> Result<()> {
                                         keyboard.reset()?;
                                         mouse.reset()?;
                                         consumer_device.reset()?;
-                                    }
+                                    },
+                                    InputEvent::Shutdown => log::info!("Shutdown")
                                 }
                                 last_input = Instant::now();
                                 // println!("{:?}", event);

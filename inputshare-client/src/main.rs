@@ -102,7 +102,10 @@ fn client() -> Result<()> {
                     dialog = Some(thread::spawn(|| run_key_tester()));
                 },
                 Some(GuiEvent::ShutdownServer) => {
-                    log::info!("Shutdown");
+                    log::info!("Sending shutdown signal to server");
+                    if let Some(ref mut transmitter) = input_transmitter {
+                        transmitter.sender.deref().borrow_mut().shutdown_remote();
+                    }
                 }
                 None => { }
             }
