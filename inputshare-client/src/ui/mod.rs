@@ -5,8 +5,9 @@ use std::ptr::null_mut;
 use system_menu::SystemMenu;
 use native_windows_gui as nwg;
 use native_windows_derive::NwgUi;
-use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams};
-use winapi::um::winuser::PostMessageW;
+use native_windows_gui::{CharEffects, ControlHandle, MessageButtons, MessageIcons, MessageParams};
+use winapi::shared::windef::HWND;
+use winapi::um::winuser::{MSG, PostMessageW, WM_SYSCOMMAND};
 
 pub use key_tester::*;
 use crate::CONNECT;
@@ -32,19 +33,20 @@ pub struct InputShareApp {
     network_info_toggle: nwg::MenuItem,
 
     #[nwg_control(parent: system_menu, text: "Open Key Tester")]
+    //#[nwg_events( OnMenuItemSelected: [nwg::stop_thread_dispatch()] )]
     key_tester_button: nwg::MenuItem,
 
     #[nwg_control(parent: system_menu, text: "Shutdown Server", disabled: true)]
     shutdown_pi_button: nwg::MenuItem,
 
     #[nwg_control(text: "", font: Some(&data.small_font), size: (100, 13), position: (2, 2), flags: "VISIBLE")]
-    pub info_label: nwg::Label,
+    info_label: nwg::Label,
 
     #[nwg_control(text: "Not Connected", size: (240, 45), position: (30, 10), flags: "VISIBLE|DISABLED")]
     pub status_label: nwg::RichLabel,
 
     #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
-    #[nwg_events( OnButtonClick: [InputShareApp::connect] )]
+    #[nwg_events( OnButtonClick: [InputShareApp::connect_button_press] )]
     pub connect_button: nwg::Button,
 
 
@@ -77,13 +79,41 @@ impl StatusText {
 
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum GuiEvent {
+    NetworkInfo,
+    KeyTester,
+    ShutdownServer
+}
+
 impl InputShareApp {
 
-    pub fn connect(&self) {
-        //nwg::simple_message("Hello", &format!("Hello {}", self.name_edit.text()));
-        unsafe {
-            PostMessageW(null_mut(), CONNECT, 0, 0);
+    pub fn handle_event(&self, msg: &MSG) -> Option<GuiEvent> {
+        match self.window.handle.matches_hwnd(msg.hwnd) {
+            true => match msg.message {
+                WM_SYSCOMMAND => match msg.wParam as u32{
+                    id if self.network_info_toggle.handle.matches_item_id(id) => Some(GuiEvent::NetworkInfo),
+                    id if self.key_tester_button.handle.matches_item_id(id) => Some(GuiEvent::KeyTester),
+                    id if self.shutdown_pi_button.handle.matches_item_id(id) => Some(GuiEvent::ShutdownServer),
+                    _ => None
+                },
+                _ => None
+            }
+            false => None
         }
+    }
+
+    pub fn show_network_info_enabled(&self, enabled: bool) {
+        self.network_info_toggle.set_checked(enabled);
+        self.info_label.set_visible(enabled);
+    }
+
+    pub fn update_network_info(&self, info: &str) {
+        self.info_label.set_text(info)
+    }
+
+    pub fn connect_button_press(&self) {
+        unsafe { PostMessageW(null_mut(), CONNECT, 0, 0); }
     }
 
     pub fn set_status(&self, status: StatusText) {
@@ -110,4 +140,37 @@ impl InputShareApp {
         });
     }
 
+}
+
+trait ControlHandleExt {
+    fn matches_hwnd(self, hwnd: HWND) -> bool;
+    fn matches_item_id(self, id: u32) -> bool;
+}
+
+impl ControlHandleExt for ControlHandle {
+    fn matches_hwnd(self, hwnd: HWND) -> bool {
+        match self {
+            ControlHandle::NoHandle => false,
+            ControlHandle::Hwnd(v) => v == hwnd,
+            ControlHandle::Menu(_, _) => false,
+            ControlHandle::PopMenu(v, _) => v == hwnd,
+            ControlHandle::MenuItem(_, _) => false,
+            ControlHandle::Notice(v, _) => v == hwnd,
+            ControlHandle::Timer(v, _) => v == hwnd,
+            ControlHandle::SystemTray(v) => v == hwnd,
+        }
+    }
+
+    fn matches_item_id(self, id: u32) -> bool {
+        match self {
+            ControlHandle::NoHandle => false,
+            ControlHandle::Hwnd(_) => false,
+            ControlHandle::Menu(_, _) => false,
+            ControlHandle::PopMenu(_, _) => false,
+            ControlHandle::MenuItem(_, v) => v == id,
+            ControlHandle::Notice(_, v) => v == id,
+            ControlHandle::Timer(_, v) => v == id,
+            ControlHandle::SystemTray(_) => false
+        }
+    }
 }

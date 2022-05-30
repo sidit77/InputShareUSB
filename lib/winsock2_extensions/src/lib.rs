@@ -34,8 +34,10 @@ pub trait WinSockExt : AsRawSocket {
     /// Modifies the socket to send `msg` to the event queue of `window` when one of the `events` occurs.
     /// This methods automatically sets the socket to non-blocking mode.
     /// This method internally uses [WSAAsyncSelect](https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-wsaasyncselect).
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn notify(&self, window: HWND, msg: u32, events: NetworkEvents) -> Result<()> {
         let socket = SOCKET::try_from(self.as_raw_socket()).unwrap();
+        assert!(!window.is_null());
         unsafe {
             match WSAAsyncSelect(socket, window, msg, events.bits()) {
                 0 => Ok(()),

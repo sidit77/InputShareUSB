@@ -221,7 +221,7 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
 }
 
 fn parse_virtual_key(key_struct: &KBDLLHOOKSTRUCT) -> Option<VirtualKey> {
-    key_struct.vkCode.try_into().ok().map(|vk:u8|VirtualKey::try_from(vk).ok()).flatten()
+    key_struct.vkCode.try_into().ok().and_then(|vk:u8|VirtualKey::try_from(vk).ok())
 }
 
 fn parse_key_state(wparam: WPARAM) -> Option<KeyState> {

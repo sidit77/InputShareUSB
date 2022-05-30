@@ -15,7 +15,7 @@ impl From<&SystemMenu> for ControlHandle {
 }
 
 impl SystemMenu {
-    pub fn builder<'a>() -> SystemMenuBuilder {
+    pub fn builder() -> SystemMenuBuilder {
         SystemMenuBuilder {
             parent: None
         }

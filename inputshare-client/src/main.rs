@@ -7,7 +7,6 @@ mod ui;
 
 use native_windows_gui as nwg;
 use std::cell::{Ref, RefCell, RefMut};
-use std::convert::TryFrom;
 use std::collections::HashSet;
 use std::fmt::Arguments;
 use std::fs;
@@ -23,13 +22,13 @@ use anyhow::Result;
 use log::LevelFilter;
 use native_windows_gui::NativeUi;
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
-use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
+use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::sender::InputSender;
-use crate::ui::{InputShareApp, run_key_tester, StatusText};
+use crate::ui::{GuiEvent, InputShareApp, run_key_tester, StatusText};
 use crate::windows::{get_message, wait_message_timeout};
 
 const SOCKET: u32 = WM_USER + 1;
@@ -68,7 +67,7 @@ fn client() -> Result<()> {
     let app = InputShareApp::build_ui(Default::default())?;
 
     app.set_status(StatusText::NotConnected);
-    app.info_label.set_visible(config.show_network_info);
+    app.show_network_info_enabled(config.show_network_info);
 
     let socket = UdpSocket::bind(Endpoint::remote_any())?;
     socket.notify(app.window.handle.hwnd().unwrap(), SOCKET, NetworkEvents::Read)?;
@@ -87,12 +86,21 @@ fn client() -> Result<()> {
         }))?;
         let mut socket_message = false;
         while let Some(msg) = get_message() {
+            match app.handle_event(&msg) {
+                Some(GuiEvent::NetworkInfo) => {
+                    config.show_network_info = !config.show_network_info;
+                    app.show_network_info_enabled(config.show_network_info);
+                },
+                Some(GuiEvent::KeyTester) => {
+                    log::info!("Key Tester");
+                },
+                Some(GuiEvent::ShutdownServer) => {
+                    log::info!("Shutdown");
+                }
+                None => { }
+            }
             match msg.message {
                 WM_QUIT => break 'outer,
-                WM_KEYDOWN => if matches!(VirtualKey::try_from(msg.wParam as u8), Ok(VirtualKey::F1)) && (msg.lParam & (1 << 30)) == 0{
-                    config.show_network_info = !config.show_network_info;
-                    app.info_label.set_visible(config.show_network_info);
-                },
                 TOGGLED => {
                     match msg.wParam {
                         0 => app.set_status(StatusText::Remote),
@@ -178,7 +186,7 @@ fn client() -> Result<()> {
                 Ok(connection) => (connection.rtt(), f32::round(100.0 * connection.packet_loss()) as u32),
                 Err(_) => (0, 0)
             };
-            app.info_label.set_text(format_buf!(&mut buffer, "{:>3}% {}ms", pl, rtt)?);
+            app.update_network_info(format_buf!(&mut buffer, "{:>3}% {}ms", pl, rtt)?);
             last_network_label_update = Instant::now();
         }
     }
