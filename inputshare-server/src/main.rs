@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use mio::{Events, Interest, Poll, Token};
 use anyhow::Result;
 use clap::Parser;
+use log::LevelFilter;
 use mio::net::UdpSocket;
 use mio_signals::{Signal, Signals, SignalSet};
 use udp_connections::{MAX_PACKET_SIZE, Server, ServerEvent, Transport};
@@ -37,6 +38,13 @@ struct Args {
 }
 
 fn main() -> Result<()>{
+    env_logger::builder()
+        .filter_level(LevelFilter::Info)
+        .format_timestamp(None)
+        //.format_target(false)
+        .parse_default_env()
+        .init();
+
     let args = Args::parse();
 
     configfs::enable_hid()?;
@@ -49,7 +57,7 @@ fn main() -> Result<()>{
 }
 
 fn server(args: Args) -> Result<()> {
-    println!("Opening HID devices");
+    log::info!("Opening HID devices");
 
     let mut mouse = Mouse::new(args.mouse_tesselation_factor.try_into()?)?;
     let mut keyboard = Keyboard::new()?;
@@ -67,7 +75,7 @@ fn server(args: Args) -> Result<()> {
     poll.registry().register(&mut socket, SERVER, Interest::READABLE)?;
     let mut socket = Server::new(MioSocket::from(socket), IDENTIFIER, 1);
 
-    println!("Started server on {}", socket.local_addr()?);
+    log::info!("Started server on {}", socket.local_addr()?);
 
     let mut last_input = Instant::now();
     let mut idle_move_x = -10;
@@ -81,6 +89,7 @@ fn server(args: Args) -> Result<()> {
         if let Some(secs) = args.auto_movement_timeout {
             let mut remaining = (last_input + Duration::from_secs(secs)).saturating_duration_since(Instant::now());
             if remaining.is_zero() {
+                log::debug!("Time is move -> moving mouse");
                 mouse.move_by(idle_move_x, 0)?;
                 idle_move_x *= -1;
                 last_input = Instant::now();
@@ -114,11 +123,11 @@ fn server(args: Args) -> Result<()> {
             match socket.next_event(&mut buffer) {
                 Ok(Some(event)) => match event {
                     ServerEvent::ClientConnected(client_id) => {
-                        println!("Client {} connected", client_id);
+                        log::info!("Client {} connected", client_id);
                         receivers.insert(client_id.into(), InputReceiver::new());
                     },
                     ServerEvent::ClientDisconnected(client_id, reason) => {
-                        println!("Client {} disconnected: {:?}", client_id, reason);
+                        log::info!("Client {} disconnected: {:?}", client_id, reason);
                         mouse.reset()?;
                         keyboard.reset()?;
                         consumer_device.reset()?;
@@ -130,6 +139,7 @@ fn server(args: Args) -> Result<()> {
                                 socket.send(client_id, packet).unwrap_or_default();
                             }
                             while let Some(event) = receiver.get_event() {
+                                log::trace!("Network packet: {:?}", event);
                                 match event {
                                     InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16)?,
                                     InputEvent::KeyPress(key) => keyboard.press_key(key)?,
@@ -156,7 +166,7 @@ fn server(args: Args) -> Result<()> {
                 }
                 Ok(None) => break,
                 Err(e) => {
-                    println!("Receive error: {}", e);
+                    log::info!("Receive error: {}", e);
                     break;
                 }
             }
@@ -172,7 +182,7 @@ fn server(args: Args) -> Result<()> {
         socket.disconnect(client).unwrap();
     }
 
-    println!("Shutting down");
+    log::info!("Shutting down");
 
     Ok(())
 }
@@ -230,7 +240,7 @@ impl Keyboard {
         for (i, key) in self.pressed_keys.iter().enumerate().take(6) {
             report[2 + i] = (*key).into()
         }
-
+        log::trace!("Wring keyboard report: {:?}", &report);
         self.device.write_all(&report)
     }
 
@@ -275,6 +285,7 @@ impl ConsumerDevice {
     }
 
     fn send_report(&mut self) -> std::io::Result<()> {
+        log::trace!("Wring consumer device report: {:?}", &self.pressed_keys.bits().to_le_bytes());
         self.device.write_all(&self.pressed_keys.bits().to_le_bytes())
     }
 
@@ -332,6 +343,7 @@ impl Mouse {
         report[5..=5].copy_from_slice(&dv.to_le_bytes());
         report[6..=6].copy_from_slice(&dh.to_le_bytes());
 
+        log::trace!("Wring mouse report: {:?}", &report);
         self.device.write_all(&report)
     }
 

@@ -70,7 +70,7 @@ impl InputReceiver {
                 Ok(MessageType::HorizontalScrolling) => self.events.push_back(InputEvent::HorizontalScrolling(msg_arg as i8)),
                 Ok(MessageType::VerticalScrolling) => self.events.push_back(InputEvent::VerticalScrolling(msg_arg as i8)),
                 Ok(MessageType::Reset) => self.events.push_back(InputEvent::Reset),
-                Err(e) => println!("Invalid message: {}", e)
+                Err(e) => log::warn!("Invalid message: {}", e)
             }
             self.last_message = start_message + i + 1;
         }

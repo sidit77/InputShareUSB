@@ -106,7 +106,7 @@ const CONSUMER_REPORT_DESC: &[u8] = &[
 ];
 
 pub fn enable_hid() -> Result<()>{
-    println!("Enabling HID device");
+    log::info!("Enabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/")?;
     fs::create_dir("g1")?;
@@ -174,7 +174,7 @@ pub fn enable_hid() -> Result<()>{
 }
 
 pub fn disable_hid() -> Result<()>{
-    println!("Disabling HID device");
+    log::info!("Disabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/g1/")?;
 
