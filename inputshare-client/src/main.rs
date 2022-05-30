@@ -3,6 +3,7 @@
 mod sender;
 mod windows;
 mod conversions;
+mod ui;
 
 use native_windows_gui as nwg;
 use std::cell::{Ref, RefCell, RefMut};
@@ -19,8 +20,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
-use native_windows_derive::NwgUi;
-use native_windows_gui::{CharEffects, MessageButtons, MessageIcons, MessageParams, NativeUi};
+use native_windows_gui::NativeUi;
 use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX_PACKET_SIZE};
 use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_KEYDOWN, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
@@ -28,6 +28,7 @@ use winsock2_extensions::{NetworkEvents, WinSockExt};
 use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::sender::InputSender;
+use crate::ui::{InputShareApp, run_key_tester, StatusText};
 use crate::windows::{get_message, wait_message_timeout};
 
 const SOCKET: u32 = WM_USER + 1;
@@ -56,7 +57,8 @@ fn client() -> Result<()> {
 
     let mut input_transmitter: Option<InputTransmitter> = None;
 
-    let app = InputShareApp::build_ui(Default::default()).expect("Failed to build UI");
+    let app = InputShareApp::build_ui(Default::default())?;
+
     app.set_status(StatusText::NotConnected);
     app.info_label.set_visible(config.show_network_info);
 
@@ -313,92 +315,6 @@ impl<'a> InputTransmitter<'a> {
 
 }
 
-
-#[derive(Default, NwgUi)]
-pub struct InputShareApp {
-    #[nwg_resource(family: "Consolas", size: 12, weight: 500)]
-    small_font: nwg::Font,
-
-    #[nwg_control(size: (300, 133), position: (300, 300), title: "InputShare Client", flags: "WINDOW|VISIBLE",
-        icon: Some(&nwg::EmbedResource::load(None)?.icon(1, None).unwrap()))]
-    #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()] )]
-    window: nwg::Window,
-
-    #[nwg_control(text: "", font: Some(&data.small_font), size: (100, 13), position: (2, 2), flags: "VISIBLE")]
-    info_label: nwg::Label,
-
-    #[nwg_control(text: "Not Connected", size: (240, 45), position: (30, 10), flags: "VISIBLE|DISABLED")]
-    status_label: nwg::RichLabel,
-
-    #[nwg_control(text: "Connect", size: (280, 60), position: (10, 60))]
-    #[nwg_events( OnButtonClick: [InputShareApp::connect] )]
-    connect_button: nwg::Button,
-
-
-}
-
-#[derive(Debug, Copy, Clone)]
-enum StatusText {
-    Local,
-    Remote,
-    NotConnected
-}
-
-impl StatusText {
-
-    fn text(self) -> &'static str{
-        match self {
-            StatusText::Local => "Local",
-            StatusText::Remote => "Remote",
-            StatusText::NotConnected => "Not Connected",
-        }
-    }
-
-    fn color(self) -> [u8; 3] {
-        match self {
-            StatusText::Local => [60, 140, 255],
-            StatusText::Remote => [255, 80, 100],
-            StatusText::NotConnected => [150, 150, 150],
-        }
-    }
-
-}
-
-impl InputShareApp {
-
-    fn connect(&self) {
-        //nwg::simple_message("Hello", &format!("Hello {}", self.name_edit.text()));
-        unsafe {
-            PostMessageW(null_mut(), CONNECT, 0, 0);
-        }
-    }
-
-    fn set_status(&self, status: StatusText) {
-        self.status_label.set_text(status.text());
-        self.status_label.set_para_format(0..100, &nwg::ParaFormat {
-            alignment: Some(nwg::ParaAlignment::Center),
-            ..Default::default()
-        });
-        self.status_label.set_char_format(0..100, &nwg::CharFormat {
-            height: Some(500),
-            effects: Some(CharEffects::BOLD),
-            text_color: Some(status.color()),
-            //font_face_name: Some("Comic Sans MS".to_string()),
-            ..Default::default()
-        });
-    }
-
-    fn show_error(&self, msg: &str) {
-        nwg::modal_message(&self.window, &MessageParams {
-            title: "Error",
-            content: msg,
-            buttons: MessageButtons::Ok,
-            icons: MessageIcons::Error
-        });
-    }
-
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hotkey {
     pub modifiers: HashSet<VirtualKey>,
@@ -480,45 +396,4 @@ fn inplace_format<'a>(buf: &'a mut [u8], args: Arguments<'_>) -> std::io::Result
 #[macro_export]
 macro_rules! format_buf {
     ($dst:expr, $($arg:tt)*) => (inplace_format($dst, format_args!($($arg)*)))
-}
-
-#[derive(Default, NwgUi)]
-pub struct KeyTester {
-    #[nwg_resource(family: "Consolas", size: 25, weight: 500)]
-    small_font: nwg::Font,
-
-    #[nwg_control(size: (300, 50), position: (300, 300), title: "Key Tester", flags: "WINDOW|VISIBLE",
-    icon: Some(&nwg::EmbedResource::load(None)?.icon(1, None).unwrap()))]
-    #[nwg_events( OnWindowClose: [nwg::stop_thread_dispatch()])]
-    window: nwg::Window,
-
-    #[nwg_control(text: "Press a key", h_align: HTextAlign::Center, v_align: VTextAlign::Center,
-      font: Some(&data.small_font), size: (300, 50), position: (0, 10), flags: "VISIBLE")]
-    info_label: nwg::Label,
-
-}
-
-fn run_key_tester() -> Result<()> {
-    let app = KeyTester::build_ui(Default::default()).expect("Failed to build UI");
-    let mut pressed_keys = HashSet::new();
-    let _h = InputHook::new(move |event|{
-        if let Some(event) = event.to_key_event() {
-            match (pressed_keys.contains(&event.key), event.state) {
-                (false, KeyState::Pressed) => {
-                    pressed_keys.insert(event.key);
-                    app.info_label.set_text(&format!("{:?}", event.key))
-                },
-                (true, KeyState::Released) => {
-                    pressed_keys.remove(&event.key);
-                },
-                _ => { }
-            }
-        }
-        if let InputEvent::KeyboardKeyEvent(_, sc, _) = event {
-            println!("{:?} {:?}", event, wsc_to_hkc(sc));
-        }
-        true
-    }, true, HookType::KeyboardMouse)?;
-    nwg::dispatch_thread_events();
-    Ok(())
 }
