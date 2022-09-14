@@ -26,7 +26,7 @@ use udp_connections::{Client, ClientDisconnectReason, ClientEvent, Endpoint, MAX
 use winapi::um::winuser::{GetCursorPos, PostMessageW, WM_QUIT, WM_USER};
 use inputshare_common::IDENTIFIER;
 use winsock2_extensions::{NetworkEvents, WinSockExt};
-use yawi::{HookType, Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
+use yawi::{Input, InputEvent, InputHook, KeyState, ScrollDirection, send_inputs, VirtualKey};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::sender::InputSender;
 use crate::ui::{ConnectionState, GuiEvent, InputShareApp, run_key_tester, StatusText};
@@ -206,12 +206,12 @@ fn client() -> Result<()> {
     Ok(())
 }
 
-struct InputTransmitter<'a> {
-    _hook: InputHook<'a>,
+struct InputTransmitter {
+    _hook: InputHook,
     sender: Rc<RefCell<InputSender>>
 }
 
-impl<'a> InputTransmitter<'a> {
+impl InputTransmitter {
 
     fn new(config: &Config) -> Result<Self> {
         let sender = Rc::new(RefCell::new(InputSender::new(config.mouse_speed_factor)));
@@ -229,7 +229,7 @@ impl<'a> InputTransmitter<'a> {
             let mut captured = false;
             let mut pressed_keys = HashSet::new();
 
-            InputHook::new(move |event|{
+            InputHook::register(move |event|{
                 if let Some(event) = event.to_key_event() {
                     if blacklist.contains(&event.key){
                         return true;
@@ -319,7 +319,7 @@ impl<'a> InputTransmitter<'a> {
                 }
 
                 !captured
-            }, true, HookType::KeyboardMouse)?
+            })
         };
         Ok(Self {
             _hook: hook,

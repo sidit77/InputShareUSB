@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use yawi::{HookType, InputEvent, InputHook, KeyState};
+use yawi::{InputEvent, InputHook, KeyState};
 use anyhow::Result;
 use native_windows_gui as nwg;
 use native_windows_derive::NwgUi;
@@ -25,7 +25,7 @@ pub struct KeyTester {
 pub fn run_key_tester() -> Result<()> {
     let app = KeyTester::build_ui(Default::default())?;
     let mut pressed_keys = HashSet::new();
-    let _h = InputHook::new(move |event|{
+    let _h = InputHook::register(move |event|{
         if let Some(event) = event.to_key_event() {
             match (pressed_keys.contains(&event.key), event.state) {
                 (false, KeyState::Pressed) => {
@@ -42,7 +42,7 @@ pub fn run_key_tester() -> Result<()> {
             log::info!("{:?} {:?}", event, wsc_to_hkc(sc));
         }
         true
-    }, true, HookType::KeyboardMouse)?;
+    });
     nwg::dispatch_thread_events();
     Ok(())
 }
