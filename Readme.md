@@ -15,6 +15,7 @@ In other words it is designed to run with you typical work laptop.
 ## Required Hardware
 
 This program needs an external piece of hardware that has some form of network access and can act like a USB-device (supports USB-OTG). I use a [Raspberry Pi Zero W](https://www.raspberrypi.org/products/raspberry-pi-zero-w/), but the [Raspberry Pi 4](https://www.raspberrypi.org/products/raspberry-pi-4-model-b/) should work as well.
+It's also important that the used USB cable is an actual data cable and not just a charging cable (Yes, they unfortunately exist and can be hard to tell apart).
 
 
 
