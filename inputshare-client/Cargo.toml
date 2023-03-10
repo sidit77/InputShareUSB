@@ -10,18 +10,24 @@ build = "build.rs"
 [dependencies]
 log = "0.4"
 env_logger = "0.10"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-winapi = { version = "0.3", features = ["winuser", "minwindef"] }
-byteorder = "1"
-anyhow = "1.0"
-native-windows-gui = "1.0"
-native-windows-derive = "1.0"
-inputshare-common = { path = "../lib/inputshare-common" }
-winsock2_extensions = { path = "../lib/winsock2_extensions" }
-yawi = {path = "../lib/yawi", features = ["serde"]}
+# serde = { version = "1.0", features = ["derive"] }
+# serde_json = "1.0"
+# winapi = { version = "0.3", features = ["winuser", "minwindef"] }
+# byteorder = "1"
+anyhow = { version = "1.0", features = ["backtrace"] }
+# native-windows-gui = "1.0"
+# native-windows-derive = "1.0"
+
+egui = "0.21"
+winit = "0.28"
+
+# inputshare-common = { path = "../lib/inputshare-common" }
+# winsock2_extensions = { path = "../lib/winsock2_extensions" }
+# yawi = {path = "../lib/yawi", features = ["serde"]}
+egui-d3d11 = { path = "../lib/egui-d3d11", features = ["egui-winit"]}
+
 udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
+error-tools = { git = "https://github.com/sidit77/error-tools.git", features = ["log", "gui"] }
 
-
-[target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
+[build-dependencies]
+tauri-winres = "0.1"
