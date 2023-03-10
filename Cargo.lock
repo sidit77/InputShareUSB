@@ -941,7 +941,7 @@ dependencies = [
  "error-tools",
  "log",
  "tauri-winres",
- "udp_connections",
+ "windows",
  "winit",
 ]
 

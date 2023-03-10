@@ -26,8 +26,20 @@ winit = "0.28"
 # yawi = {path = "../lib/yawi", features = ["serde"]}
 egui-d3d11 = { path = "../lib/egui-d3d11", features = ["egui-winit"]}
 
-udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
+# udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
 error-tools = { git = "https://github.com/sidit77/error-tools.git", features = ["log", "gui"] }
+
+[dependencies.windows]
+version = "0.44"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_Com",
+    "Win32_UI_HiDpi"
+]
 
 [build-dependencies]
 tauri-winres = "0.1"
