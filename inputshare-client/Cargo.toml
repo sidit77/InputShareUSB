@@ -2,14 +2,14 @@
 name = "inputshare-client"
 version = "2.3.0"
 authors = ["sidit77 <sidit77@gmail.com>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 log = "0.4"
-env_logger = "0.9"
+env_logger = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 winapi = { version = "0.3", features = ["winuser", "minwindef"] }
