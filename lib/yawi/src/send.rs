@@ -1,9 +1,9 @@
 use std::iter::once;
 use std::mem::size_of;
-use windows::core::{Result, Error};
+use windows::core::Error;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use crate::{KeyState, Input, VirtualKey, ScrollDirection};
+use crate::{KeyState, Input, VirtualKey, ScrollDirection, WinResult};
 
 fn add_to_vec(vec: &mut Vec<INPUT>, input: Input) {
     match input {
@@ -128,7 +128,7 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
 /// [SendInput](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
 ///
 /// Return Ok if the number of send inputs match the number of supplied inputs
-pub fn send_inputs<'a>(inputs: impl IntoIterator<Item=Input<'a>>) -> Result<()>{
+pub fn send_inputs<'a>(inputs: impl IntoIterator<Item=Input<'a>>) -> WinResult<()>{
     let mut vec = Vec::new();
     for input in inputs {
         add_to_vec(&mut vec, input);
@@ -145,6 +145,6 @@ pub fn send_inputs<'a>(inputs: impl IntoIterator<Item=Input<'a>>) -> Result<()>{
 /// Convenience function to send a single input
 ///
 /// See `send_inputs` for more info
-pub fn send_input(input: Input) -> Result<()> {
+pub fn send_input(input: Input) -> WinResult<()> {
     send_inputs(once(input))
 }
