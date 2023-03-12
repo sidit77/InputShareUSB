@@ -11,6 +11,7 @@ use windows::Win32::Graphics::Dxgi::Common::*;
 use crate::{Device, DeviceContext};
 
 pub struct CallbackFn {
+    #[allow(clippy::type_complexity)]
     f: Box<dyn Fn(PaintCallbackInfo, &Painter) + Sync + Send>,
 }
 
@@ -292,11 +293,9 @@ impl Painter {
     }
 
     pub fn set_texture(&mut self, tex_id: TextureId, delta: &ImageDelta) {
-        if !self.textures.contains_key(&tex_id) {
-            let tex = Texture::new(&self.device, delta.image.size(), delta.options);
-            self.textures.insert(tex_id, tex);
-        }
-        let texture = self.textures.get_mut(&tex_id).unwrap();
+        let texture = self.textures
+            .entry(tex_id)
+            .or_insert_with(|| Texture::new(&self.device, delta.image.size(), delta.options));
 
         match &delta.image {
             egui::ImageData::Color(image) => {

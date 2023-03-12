@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::marker::PhantomData;
 use anyhow::Result;
 use error_tools::SomeOptionExt;
@@ -16,7 +17,7 @@ pub struct Direct3D {
     pub device: ID3D11Device,
     pub context: ID3D11DeviceContext4,
     pub swap_chain: IDXGISwapChain1,
-    render_target: Option<ID3D11RenderTargetView>
+    render_target: Cell<Option<ID3D11RenderTargetView>>
 }
 
 impl Direct3D {
@@ -64,34 +65,38 @@ impl Direct3D {
                 None,
             )?
         };
-
-        let rtv = unsafe {
-            let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
-            let mut target = std::mem::zeroed();
-            d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
-            target.some()?
-        };
-
+        unsafe {
+            swap_chain.SetBackgroundColor(&DXGI_RGBA { r: 1.0, g: 1.0, b: 1.0, a: 1.0})?;
+        }
         Ok(Self {
             device: d3d_device,
             context: d3d_ctx,
             swap_chain,
-            render_target: Some(rtv),
+            render_target: Cell::new(None),
         })
     }
 
-    pub fn render_target(&self) -> &ID3D11RenderTargetView {
-        self.render_target.as_ref()
-            .expect("The rendertarget should never not be initialized")
+    pub fn render_target(&self) -> ID3D11RenderTargetView {
+        let target = self.render_target
+            .take()
+            .unwrap_or_else(||unsafe {
+                let buffer = self.swap_chain.GetBuffer::<ID3D11Texture2D>(0)
+                    .expect("Can not get a valid back buffer");
+                let mut target = None;
+                self.device.CreateRenderTargetView(&buffer, None, Some(&mut target))
+                    .expect("Can not create a render target");
+                target
+                    .expect("Render target is none")
+            });
+        self.render_target.set(Some(target.clone()));
+        target
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+    pub fn resize(&self, width: u32, height: u32) -> Result<()> {
         unsafe {
-            self.context.OMSetRenderTargets(None, None);
-            self.render_target = None;
+            self.render_target.set(None);
+            self.context.ClearState();
             self.swap_chain.ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0)?;
-            let buffer = self.swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
-            self.device.CreateRenderTargetView(&buffer, None, Some(&mut self.render_target))?;
             Ok(())
         }
     }

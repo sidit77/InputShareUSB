@@ -1,3 +1,89 @@
+use std::time::Instant;
+use egui::Context;
+use error_tools::log::LogResultExt;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::EventLoopWindowTarget;
+use winit::window::Window;
+use egui_d3d11::EguiD3D11;
+use crate::windows::Direct3D;
+
+pub struct EguiWindow {
+    d3d: Direct3D,
+    egui: EguiD3D11,
+    window: Window,
+    next_repaint: Option<Instant>
+}
+
+impl EguiWindow {
+
+    pub fn new<T>(window: Window, event_loop: &EventLoopWindowTarget<T>) -> Self {
+        let d3d = Direct3D::new(&window).expect("Can not create a directx context");
+        let egui = EguiD3D11::new(event_loop, d3d.device.clone(), d3d.context.clone());
+        Self {
+            d3d,
+            egui,
+            window,
+            next_repaint: Some(Instant::now()),
+        }
+    }
+
+    pub fn ctx(&self) -> &Context {
+        &self.egui.egui_ctx
+    }
+
+    pub fn handle_events<T>(&mut self, event: &Event<T>, gui: impl FnMut(&Context)) -> bool {
+        if self.next_repaint().map(|t| Instant::now().checked_duration_since(t)).is_some() {
+            self.window.request_redraw();
+        }
+        match event {
+            Event::RedrawEventsCleared  => {
+                let repaint_after = self.egui.run(&self.window, gui);
+                self.next_repaint = Instant::now().checked_add(repaint_after);
+                unsafe {
+                    let render_target = self.d3d.render_target();
+                    self.d3d.context.OMSetRenderTargets(Some(&[render_target]), None);
+                    self.egui.paint(&self.window);
+                    self.d3d.swap_chain
+                        .Present(1, 0)
+                        .ok()
+                        .expect("Could not present swapchain");
+                }
+            },
+            //Event::RedrawRequested(_) if !cfg!(windows) => self.redraw(gui),
+            Event::WindowEvent { event, .. } => {
+                match &event {
+                    WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                        return true;
+                    },
+                    WindowEvent::Resized(size) => {
+                        self.d3d.resize(size.width, size.height)
+                            .log_ok("Could not resize swapchain");
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        let size = **new_inner_size;
+                        self.d3d.resize(size.width, size.height)
+                            .log_ok("Could not resize swapchain");
+                    },
+                    _ => {}
+                }
+
+                let event_response = self.egui.on_event(event);
+                if event_response.repaint {
+                    self.window.request_redraw();
+                }
+            }
+            _ => (),
+        }
+        false
+    }
+
+    pub fn next_repaint(&self) -> Option<Instant> {
+        self.next_repaint
+    }
+
+}
+
+/*
 mod system_menu;
 mod key_tester;
 
@@ -210,3 +296,4 @@ impl ControlHandleExt for ControlHandle {
         }
     }
 }
+*/
