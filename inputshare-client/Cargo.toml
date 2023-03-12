@@ -23,7 +23,7 @@ winit = "0.28"
 
 # inputshare-common = { path = "../lib/inputshare-common" }
 # winsock2_extensions = { path = "../lib/winsock2_extensions" }
-# yawi = {path = "../lib/yawi", features = ["serde"]}
+yawi = {path = "../lib/yawi", features = ["serde"]}
 egui-d3d11 = { path = "../lib/egui-d3d11", features = ["egui-winit"]}
 
 # udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}

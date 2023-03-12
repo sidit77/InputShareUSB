@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY;
 
 
 pub type WindowsScanCode = u16;
@@ -330,17 +331,20 @@ pub enum VirtualKey {
     OemClear                     = 0xFE
 }
 
-impl VirtualKey {
+impl From<VirtualKey> for VIRTUAL_KEY {
+    fn from(value: VirtualKey) -> Self {
+        VIRTUAL_KEY(u8::from(value).into())
+    }
+}
 
+impl VirtualKey {
     pub fn is_mouse_button(self) -> bool {
         matches!(self, VirtualKey::LButton | VirtualKey::MButton | VirtualKey::RButton | VirtualKey::XButton1 | VirtualKey::XButton2)
     }
-
 }
 
 impl Display for VirtualKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-
         write!(f, "{}", format!("{:?}", self).trim_start_matches("Key"))
     }
 }

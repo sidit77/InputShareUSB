@@ -1,19 +1,18 @@
-use winapi::um::winuser::{INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEINPUT, INPUT_MOUSE, XBUTTON1, XBUTTON2, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, WHEEL_DELTA, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, GetSystemMetrics};
-use std::mem;
-use std::io::{Error, Result};
+use std::iter::once;
+use std::mem::size_of;
+use windows::core::{Result, Error};
+use windows::Win32::UI::Input::KeyboardAndMouse::*;
+use windows::Win32::UI::WindowsAndMessaging::*;
 use crate::{KeyState, Input, VirtualKey, ScrollDirection};
 
-
-
-
-fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
+fn add_to_vec(vec: &mut Vec<INPUT>, input: Input) {
     match input {
         Input::KeyboardKeyInput(key, state) =>  {
             vec.push(create_keyboard_input(KEYBDINPUT{
-                wVk: u8::from(*key).into(),
+                wVk: key.into(),
                 wScan: 0,
                 dwFlags: match state {
-                    KeyState::Pressed => 0,
+                    KeyState::Pressed => Default::default(),
                     KeyState::Released => KEYEVENTF_KEYUP
                 },
                 time: 0,
@@ -23,14 +22,14 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
         Input::StringInput(string) => {
             for c in string.encode_utf16() {
                 vec.push(create_keyboard_input(KEYBDINPUT{
-                    wVk: 0,
+                    wVk: Default::default(),
                     wScan: c,
                     dwFlags: KEYEVENTF_UNICODE,
                     time: 0,
                     dwExtraInfo: 0
                 }));
                 vec.push(create_keyboard_input(KEYBDINPUT{
-                    wVk: 0,
+                    wVk: Default::default(),
                     wScan: c,
                     dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
                     time: 0,
@@ -43,8 +42,8 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                 dx: 0,
                 dy: 0,
                 mouseData: match key {
-                    VirtualKey::XButton1 => XBUTTON1 as u32,
-                    VirtualKey::XButton2 => XBUTTON2 as u32,
+                    VirtualKey::XButton1 => XBUTTON1 as i32,
+                    VirtualKey::XButton2 => XBUTTON2 as i32,
                     _ => 0
                 },
                 dwFlags: match (key, state) {
@@ -71,7 +70,7 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
                 mouseData: (WHEEL_DELTA as f32 * match dir {
                     ScrollDirection::Horizontal(x) => x,
                     ScrollDirection::Vertical(x) => x
-                }) as i32 as u32,
+                }) as i32,
                 dwFlags: match dir {
                     ScrollDirection::Horizontal(_) => MOUSEEVENTF_HWHEEL,
                     ScrollDirection::Vertical(_) => MOUSEEVENTF_WHEEL
@@ -82,8 +81,8 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
         }
         Input::RelativeMouseMoveInput(dx, dy) => {
             vec.push(create_mouse_input(MOUSEINPUT{
-                dx: *dx,
-                dy: *dy,
+                dx,
+                dy,
                 mouseData: 0,
                 dwFlags: MOUSEEVENTF_MOVE,
                 time: 0,
@@ -92,8 +91,8 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
         }
         Input::AbsoluteMouseMoveInput(x, y) => {
             vec.push(create_mouse_input(MOUSEINPUT{
-                dx: x * 65536 / system_metric(0),
-                dy: y * 65536 / system_metric(1),
+                dx: x * 65536 / system_metric(SM_CXSCREEN),
+                dy: y * 65536 / system_metric(SM_CYSCREEN),
                 mouseData: 0,
                 dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
                 time: 0,
@@ -103,32 +102,24 @@ fn add_to_vec(vec: &mut Vec<INPUT>, input: &Input) {
     }
 }
 
-fn system_metric(index: i32) -> i32{
+fn system_metric(index: SYSTEM_METRICS_INDEX) -> i32{
     unsafe {
         GetSystemMetrics(index)
     }
 }
 
 fn create_mouse_input(ms: MOUSEINPUT) -> INPUT {
-    unsafe {
-        let mut input = INPUT {
-            type_: INPUT_MOUSE,
-            u: std::mem::zeroed()
-        };
-        *input.u.mi_mut() = ms;
-        input
-    }
+    let mut input = INPUT::default();
+    input.r#type = INPUT_MOUSE;
+    input.Anonymous.mi = ms;
+    input
 }
 
 fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
-    unsafe {
-        let mut input = INPUT {
-            type_: INPUT_KEYBOARD,
-            u: std::mem::zeroed()
-        };
-        *input.u.ki_mut() = kb;
-        input
-    }
+    let mut input = INPUT::default();
+    input.r#type = INPUT_KEYBOARD;
+    input.Anonymous.ki = kb;
+    input
 }
 
 /// Send multiple input events to windows
@@ -137,15 +128,17 @@ fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
 /// [SendInput](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
 ///
 /// Return Ok if the number of send inputs match the number of supplied inputs
-pub fn send_inputs<'a>(inputs: impl Iterator<Item=Input<'a>>) -> Result<()>{
+pub fn send_inputs<'a>(inputs: impl IntoIterator<Item=Input<'a>>) -> Result<()>{
     let mut vec = Vec::new();
     for input in inputs {
-        add_to_vec(&mut vec, &input);
+        add_to_vec(&mut vec, input);
     }
-    let c = unsafe {winapi::um::winuser::SendInput(vec.len() as u32, vec.as_mut_ptr(), mem::size_of::<INPUT>() as i32)};
+    let c = unsafe {
+        SendInput(&vec, size_of::<INPUT>() as i32)
+    };
     match vec.len() == c as usize {
         true => Ok(()),
-        false => Err(Error::last_os_error())
+        false => Err(Error::from_win32())
     }
 }
 
@@ -153,5 +146,5 @@ pub fn send_inputs<'a>(inputs: impl Iterator<Item=Input<'a>>) -> Result<()>{
 ///
 /// See `send_inputs` for more info
 pub fn send_input(input: Input) -> Result<()> {
-    send_inputs(std::iter::once(input))
+    send_inputs(once(input))
 }

@@ -1,10 +1,10 @@
-use winapi::um::winuser::{TranslateMessage, DispatchMessageW, MSG, GetMessageW, PostMessageW, WM_QUIT};
-use std::{mem, ptr};
+use windows::Win32::Foundation::*;
+use windows::Win32::UI::WindowsAndMessaging::*;
 
 pub fn run() {
     unsafe {
-        let mut msg: MSG = mem::zeroed();
-        while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) != 0 {
+        let mut msg: MSG = MSG::default();
+        while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -12,5 +12,5 @@ pub fn run() {
 }
 
 pub fn quit() {
-    unsafe { PostMessageW(ptr::null_mut(), WM_QUIT, 0, 0) };
+    unsafe { PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()) };
 }

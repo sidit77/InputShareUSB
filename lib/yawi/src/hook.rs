@@ -1,13 +1,14 @@
 // partially adapted from https://github.com/timokroeger/kbremap
 
-use winapi::um::winuser::{UnhookWindowsHookEx, SetWindowsHookExW, MapVirtualKeyW, CallNextHookEx, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, VK_SNAPSHOT, VK_SCROLL, VK_PAUSE, VK_NUMLOCK, MAPVK_VK_TO_VSC_EX, LLKHF_EXTENDED, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WH_MOUSE_LL, MSLLHOOKSTRUCT, LLKHF_INJECTED, LLMHF_INJECTED, HC_ACTION};
-use winapi::shared::windef::HHOOK;
-use winapi::shared::minwindef::{WPARAM, LPARAM, LRESULT, UINT};
+
 use std::cell::Cell;
 use std::os::raw;
 use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent};
 use std::convert::{TryFrom, TryInto};
 use std::ptr;
+use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::*;
+use windows::Win32::UI::WindowsAndMessaging::*;
 
 type HookFn = dyn FnMut(InputEvent) -> bool;
 
@@ -56,9 +57,9 @@ impl Drop for InputHook {
     }
 }
 
-unsafe extern "system" fn low_level_keyboard_proc(code: raw::c_int, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let key_struct = *(lparam as *const KBDLLHOOKSTRUCT);
-    if code == HC_ACTION && !parse_injected(&key_struct) {
+    if code == HC_ACTION as i32 && !parse_injected(&key_struct) {
         let event = match parse_virtual_key(&key_struct) {
             Some(key) => match parse_key_state(wparam) {
                 Some(state) => Some(InputEvent::KeyboardKeyEvent(key, parse_scancode(&key_struct), state)),
@@ -90,19 +91,19 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
     let key_struct = *(lparam as *const MSLLHOOKSTRUCT);
     if code == HC_ACTION &&  !(key_struct.flags & LLMHF_INJECTED != 0) {
         let event = match wparam as u32{
-            winapi::um::winuser::WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
-            winapi::um::winuser::WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),
-            winapi::um::winuser::WM_RBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Pressed)),
-            winapi::um::winuser::WM_RBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Released)),
-            winapi::um::winuser::WM_MBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Pressed)),
-            winapi::um::winuser::WM_MBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Released)),
-            winapi::um::winuser::WM_XBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
-            winapi::um::winuser::WM_XBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
-            winapi::um::winuser::WM_NCXBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
-            winapi::um::winuser::WM_NCXBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
-            winapi::um::winuser::WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
-            winapi::um::winuser::WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
-            winapi::um::winuser::WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
+            WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
+            WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),
+            WM_RBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Pressed)),
+            WM_RBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Released)),
+            WM_MBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Pressed)),
+            WM_MBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::MButton, KeyState::Released)),
+            WM_XBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
+            WM_XBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
+            WM_NCXBUTTONDOWN => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Pressed)),
+            WM_NCXBUTTONUP => parse_xbutton(&key_struct).map(|k| InputEvent::MouseButtonEvent(k, KeyState::Released)),
+            WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
+            WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
+            WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
             _ => {log::warn!("Unknown: {}", wparam); None}
         };
 
@@ -126,13 +127,13 @@ unsafe extern "system" fn low_level_mouse_proc(code: raw::c_int, wparam: WPARAM,
 }
 
 fn parse_wheel_delta(key_struct: &MSLLHOOKSTRUCT) -> f32{
-    (key_struct.mouseData >> 16) as i16 as f32 / winapi::um::winuser::WHEEL_DELTA as f32
+    (key_struct.mouseData >> 16) as i16 as f32 / WHEEL_DELTA as f32
 }
 
 fn parse_xbutton(key_struct: &MSLLHOOKSTRUCT) -> Option<VirtualKey>{
     match (key_struct.mouseData >> 16) as u16 {
-        winapi::um::winuser::XBUTTON1 => Some(VirtualKey::XButton1),
-        winapi::um::winuser::XBUTTON2 => Some(VirtualKey::XButton2),
+        XBUTTON1 => Some(VirtualKey::XButton1),
+        XBUTTON2 => Some(VirtualKey::XButton2),
         _ => None
     }
 }
