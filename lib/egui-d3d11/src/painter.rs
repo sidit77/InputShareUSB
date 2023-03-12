@@ -475,19 +475,16 @@ fn make_box(x: usize, y: usize, w: usize, h: usize) -> D3D11_BOX {
 }
 
 fn make_resource<T>(func: impl FnOnce(Option<*mut Option<T>>) -> windows::core::Result<()>) -> T {
-    unsafe {
-        let mut obj = std::mem::MaybeUninit::zeroed();
-        func(Some(obj.as_mut_ptr()))
-            .expect("Resource creation failed");
-        obj.assume_init()
-            .expect("Returned resource is null")
-    }
+    let mut obj = None;
+    func(Some(&mut obj))
+        .expect("Resource creation failed");
+    obj.expect("Returned resource is null")
 }
 
-fn retrieve<S, T>(self_type: &S, func: unsafe fn(&S, *mut T)) -> T {
+fn retrieve<S, T: Default>(self_type: &S, func: unsafe fn(&S, *mut T)) -> T {
     unsafe {
-        let mut desc = std::mem::MaybeUninit::zeroed();
-        func(self_type, desc.as_mut_ptr());
-        desc.assume_init()
+        let mut desc = T::default();
+        func(self_type, &mut desc);
+        desc
     }
 }
