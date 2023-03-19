@@ -87,12 +87,10 @@ pub fn main() {
     error_tools::gui::set_gui_panic_hook();
 
     let window = WindowDesc::new(make_ui())
-        .window_size((400.0, 300.0))
+        .window_size((300.0, 190.0))
         .title("InputShare Client");
 
-    let launcher = AppLauncher::with_window(window);
-
-    launcher
+    AppLauncher::with_window(window)
         .delegate(RuntimeDelegate::new())
         .configure_env(|env, _| theme::setup_theme(Theme::Light, env))
         .launch(AppState::default())
@@ -101,11 +99,19 @@ pub fn main() {
 
 fn make_ui() -> impl Widget<AppState> {
     Flex::column()
-        .with_child(Label::dynamic(|data: &AppState, _| format!("{:?}", data.connection_state)))
-        .with_child(Button::dynamic(|data: &AppState, _| match data.connection_state {
+        .with_child(Label::dynamic(|data: &AppState, _| match data.connection_state {
+            ConnectionState::Connected(Side::Local) => "Local",
+            ConnectionState::Connected(Side::Remote) => "Remote",
+            ConnectionState::Disconnected => "Disconnected"
+        }.to_string())
+            .with_text_size(25.0))
+        .with_spacer(20.0)
+        .with_child(Button::from_label(Label::dynamic(|data: &AppState, _| match data.connection_state {
             ConnectionState::Connected(_) => "Disconnect",
             ConnectionState::Disconnected => "Connect"
         }.to_string())
+            .with_text_size(17.0))
+            .fix_size(250.0, 65.0)
             .on_click(|ctx, _, _| ctx.submit_command(MSG.with(()))))
         .center()
 }
