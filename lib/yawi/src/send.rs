@@ -109,17 +109,21 @@ fn system_metric(index: SYSTEM_METRICS_INDEX) -> i32{
 }
 
 fn create_mouse_input(ms: MOUSEINPUT) -> INPUT {
-    let mut input = INPUT::default();
-    input.r#type = INPUT_MOUSE;
-    input.Anonymous.mi = ms;
-    input
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: ms
+        }
+    }
 }
 
 fn create_keyboard_input(kb: KEYBDINPUT) -> INPUT {
-    let mut input = INPUT::default();
-    input.r#type = INPUT_KEYBOARD;
-    input.Anonymous.ki = kb;
-    input
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: kb
+        }
+    }
 }
 
 /// Send multiple input events to windows

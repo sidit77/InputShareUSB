@@ -84,7 +84,7 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
 
 unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let key_struct = (lparam.0 as *const MSLLHOOKSTRUCT).read();
-    if code == HC_ACTION as i32 &&  !(key_struct.flags & LLMHF_INJECTED != 0) {
+    if code == HC_ACTION as i32 &&  key_struct.flags & LLMHF_INJECTED == 0 {
         let event = match wparam.0 as u32{
             WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
             WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),

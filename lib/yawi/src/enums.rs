@@ -358,19 +358,17 @@ impl Display for VirtualKey {
                         let scan_code = (scan_code & 0xFF) << 16 | u32::from(extended) << 24;
                         GetKeyNameTextW(scan_code as i32, &mut buffer) as usize
                     };
-                    let iter = char::decode_utf16(buffer[..length].into_iter().copied())
+                    let iter = char::decode_utf16(buffer[..length].iter().copied())
                         .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER));
                     let mut start = true;
                     for mut c in iter {
                         if c.is_whitespace() {
                             start = true;
+                        } else if start {
+                            c = c.to_ascii_uppercase();
+                            start = false;
                         } else {
-                            if start == true {
-                                c = c.to_ascii_uppercase();
-                                start = false;
-                            } else {
-                                c = c.to_ascii_lowercase();
-                            }
+                            c = c.to_ascii_lowercase();
                         }
                         f.write_char(c)?
                     }
