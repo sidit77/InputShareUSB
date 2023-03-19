@@ -1464,6 +1464,7 @@ dependencies = [
  "anyhow",
  "druid",
  "error-tools",
+ "inputshare-common",
  "serde",
  "tauri-winres",
  "tokio",

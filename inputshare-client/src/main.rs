@@ -2,6 +2,7 @@
 
 mod theme;
 mod hook;
+mod conversions;
 
 use std::time::Duration;
 use druid::widget::{Button, Flex, Label};
@@ -13,8 +14,11 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputHook, KeyEvent, KeyState, VirtualKey};
+use yawi::{InputEvent, InputHook, KeyEvent, KeyState, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
+use tokio::sync::mpsc::UnboundedReceiver;
+use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
+use crate::hook::HookEvent;
 use crate::theme::Theme;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data)]
@@ -130,28 +134,12 @@ impl AppDelegate<AppState> for RuntimeDelegate {
             cmd if cmd.is(MSG) => {
                 self.hook = match self.hook.take() {
                     None => {
-                        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-                        let hook = InputHook::register(move |event| {
-                            if let Some(KeyEvent {key, state: KeyState::Pressed}) = event.to_key_event() {
-                                sender.send(key)
-                                    .log_ok("Could not send message to runtime");
-                            }
-                            true
-                        }).log_ok("Failed to register hook");
+                        let config = Config::default();
+                        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+                        let hook = InputHook::register(hook::create_callback(&config, sender))
+                            .log_ok("Failed to register hook");
                         if hook.is_some() {
-                            self.runtime.spawn(async move {
-                                while let Some(key) = receiver.recv().await {
-                                    tracing::info!("New key: {:?}", key);
-                                }
-                                tracing::trace!("Ending async task");
-                            });
-                            let sink = ctx.get_external_handle();
-                            self.runtime.spawn(async move {
-                                tokio::time::sleep(Duration::from_secs(3)).await;
-                                tracing::trace!("removing hook");
-                                sink.submit_command(RESET, (), Target::Auto)
-                                    .log_ok("Failed to submit reset command");
-                            });
+                            self.runtime.spawn(key_handler(receiver));
                         }
                         hook
                     },
@@ -171,4 +159,35 @@ impl AppDelegate<AppState> for RuntimeDelegate {
             _ => Handled::No
         }
     }
+}
+
+async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>) {
+    while let Some(event) = receiver.recv().await {
+        match event {
+            HookEvent::Captured(captured) => tracing::info!("Input captured: {}", captured),
+            HookEvent::Input(event) => match event {
+                InputEvent::MouseMoveEvent(_x, _y) => {
+
+                }
+                InputEvent::KeyboardKeyEvent(vk, sc, ks) => match wsc_to_hkc(sc) {
+                    Some(kc) => tracing::info!("Key {:?} {:?}", kc, ks),
+                    None => match wsc_to_cdc(sc){
+                        Some(cdc) => tracing::info!("Consumer {:?} {:?}", cdc, ks),
+                        None => if! matches!(sc, 0x21d) {
+                            tracing::warn!("Unknown key: {} ({:x})", vk, sc)
+                        }
+                    }
+                }
+                InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
+                    Some(button) => tracing::info!("Mouse {:?} {:?}", button, ks),
+                    None => tracing::warn!("Unknown mouse button: {}", mb)
+                }
+                InputEvent::MouseWheelEvent(sd) => match sd {
+                    ScrollDirection::Horizontal(amount) => tracing::info!("HScroll {:?}", f32_to_i8(amount)),
+                    ScrollDirection::Vertical(amount) => tracing::info!("VScroll {:?}", f32_to_i8(amount))
+                }
+            }
+        }
+    }
+    tracing::trace!("Shutting down key handler");
 }
