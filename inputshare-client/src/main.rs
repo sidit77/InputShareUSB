@@ -4,9 +4,8 @@ mod theme;
 mod hook;
 mod conversions;
 
-use std::time::Duration;
 use druid::widget::{Button, Flex, Label};
-use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
+use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
 use tokio::runtime::{Builder, Runtime};
@@ -14,7 +13,7 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputEvent, InputHook, KeyEvent, KeyState, ScrollDirection, VirtualKey};
+use yawi::{InputEvent, InputHook, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
@@ -57,15 +56,21 @@ impl Default for Config {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Data)]
+enum Side {
+    Local, Remote
+}
+
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Data)]
 enum ConnectionState {
-    Connected,
+    Connected(Side),
     #[default]
     Disconnected
 }
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Data)]
+#[derive(Default, Debug, Clone, Data)]
 struct AppState {
+    config: Config,
     connection_state: ConnectionState
 }
 
@@ -98,7 +103,7 @@ fn make_ui() -> impl Widget<AppState> {
     Flex::column()
         .with_child(Label::dynamic(|data: &AppState, _| format!("{:?}", data.connection_state)))
         .with_child(Button::dynamic(|data: &AppState, _| match data.connection_state {
-            ConnectionState::Connected => "Disconnect",
+            ConnectionState::Connected(_) => "Disconnect",
             ConnectionState::Disconnected => "Connect"
         }.to_string())
             .on_click(|ctx, _, _| ctx.submit_command(MSG.with(()))))
@@ -132,22 +137,18 @@ impl AppDelegate<AppState> for RuntimeDelegate {
     fn command(&mut self, ctx: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
         match cmd {
             cmd if cmd.is(MSG) => {
+                data.connection_state = ConnectionState::Disconnected;
                 self.hook = match self.hook.take() {
                     None => {
-                        let config = Config::default();
                         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-                        let hook = InputHook::register(hook::create_callback(&config, sender))
+                        let hook = InputHook::register(hook::create_callback(&data.config, sender))
                             .log_ok("Failed to register hook");
                         if hook.is_some() {
-                            self.runtime.spawn(key_handler(receiver));
+                            self.runtime.spawn(key_handler(receiver, ctx.get_external_handle()));
                         }
                         hook
                     },
                     Some(_) => None
-                };
-                data.connection_state = match self.hook.is_some() {
-                    true => ConnectionState::Connected,
-                    false => ConnectionState::Disconnected
                 };
                 Handled::Yes
             },
@@ -161,10 +162,15 @@ impl AppDelegate<AppState> for RuntimeDelegate {
     }
 }
 
-async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>) {
+async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventSink) {
     while let Some(event) = receiver.recv().await {
         match event {
-            HookEvent::Captured(captured) => tracing::info!("Input captured: {}", captured),
+            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
+                data.connection_state = ConnectionState::Connected(match captured {
+                    true => Side::Remote,
+                    false => Side::Local
+                });
+            }),
             HookEvent::Input(event) => match event {
                 InputEvent::MouseMoveEvent(_x, _y) => {
 

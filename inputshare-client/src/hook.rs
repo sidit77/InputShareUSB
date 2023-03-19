@@ -11,6 +11,10 @@ pub enum HookEvent {
 }
 
 pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> impl FnMut(InputEvent) -> bool + 'static {
+    let send = move |event| sender
+        .send(event)
+        .log_ok("Could not send event");
+
     let mut old_mouse_pos = yawi::get_cursor_pos();
 
     let blacklist = VirtualKeySet::from(&config.blacklist);
@@ -21,6 +25,7 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
     let mut pressed_keys = VirtualKeySet::new();
     let mut hotkey_pressed = false;
 
+    send(HookEvent::Captured(captured));
     move |event|{
         let key_event = event.to_key_event();
         if is_blacklisted(blacklist, key_event) {
@@ -37,8 +42,7 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
                         try_release_all(pressed_keys, trigger);
                     }
                     captured = !captured;
-                    sender.send(HookEvent::Captured(captured))
-                        .log_ok("Can not send event");
+                    send(HookEvent::Captured(captured));
                     return false;
                 }
                 if hotkey_pressed && key == trigger && state == KeyState::Released {
@@ -50,12 +54,10 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
                 if let InputEvent::MouseMoveEvent(x, y) = event {
                     let (ox, oy) = old_mouse_pos;
                     if x != ox || y != oy {
-                        sender.send(HookEvent::Input(InputEvent::MouseMoveEvent(x - ox, y - oy)))
-                            .log_ok("Can not send input event");
+                        send(HookEvent::Input(InputEvent::MouseMoveEvent(x - ox, y - oy)));
                     }
                 } else {
-                    sender.send(HookEvent::Input(event))
-                        .log_ok("Can not send input event");
+                    send(HookEvent::Input(event));
                 }
 
             } else if let InputEvent::MouseMoveEvent(x, y) = event {
