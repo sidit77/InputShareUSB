@@ -27,7 +27,7 @@ impl InputHook {
                 "Only one keyboard hook can be registered per thread."
             );
 
-            log::debug!("Registering system hooks");
+            tracing::trace!("Registering system hooks");
             let keyboard = unsafe {
                 SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), HINSTANCE::default(), 0)?
             };
@@ -45,7 +45,7 @@ impl InputHook {
 
 impl Drop for InputHook {
     fn drop(&mut self) {
-        log::debug!("Removing system hooks");
+        tracing::trace!("Removing system hooks");
         HOOK.with(|state| state.take());
         unsafe { UnhookWindowsHookEx(self.keyboard) };
         unsafe { UnhookWindowsHookEx(self.mouse) };
@@ -58,16 +58,16 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
         let event = match parse_virtual_key(&key_struct) {
             Some(key) => match parse_key_state(wparam) {
                 Some(state) => Some(InputEvent::KeyboardKeyEvent(key, parse_scancode(&key_struct), state)),
-                None => {log::warn!("Unknown event: {}", wparam.0); None}
+                None => {tracing::warn!("Unknown event: {}", wparam.0); None}
             }
-            None => {log::warn!("Unknown key: {}", key_struct.vkCode); None}
+            None => {tracing::warn!("Unknown key: {}", key_struct.vkCode); None}
         };
 
         if let Some(event) = event {
             let mut handled = true;
             HOOK.with(|state| {
                 match state.take() {
-                    None => log::warn!("Keyboard hook callback was already taken"),
+                    None => tracing::warn!("Keyboard hook callback was already taken"),
                     Some(mut callback) => {
                         handled = !callback(event);
                         state.set(Some(callback));
@@ -99,14 +99,14 @@ unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam
             WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
             WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
             WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
-            _ => {log::warn!("Unknown: {}", wparam.0); None}
+            _ => {tracing::warn!("Unknown: {}", wparam.0); None}
         };
 
         if let Some(event) = event {
             let mut handled = true;
             HOOK.with(|state| {
                 match state.take() {
-                    None => log::warn!("Mouse hook callback was already taken"),
+                    None => tracing::warn!("Mouse hook callback was already taken"),
                     Some(mut callback) => {
                         handled = !callback(event);
                         state.set(Some(callback));

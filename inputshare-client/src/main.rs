@@ -1,18 +1,57 @@
 #![windows_subsystem = "windows"]
 
 mod theme;
+mod hook;
 
 use std::time::Duration;
 use druid::widget::{Button, Flex, Label};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
+use druid::im::HashSet;
 use error_tools::log::LogResultExt;
 use tokio::runtime::{Builder, Runtime};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputHook, KeyEvent, KeyState};
+use yawi::{InputHook, KeyEvent, KeyState, VirtualKey};
+use serde::{Serialize, Deserialize};
 use crate::theme::Theme;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Data)]
+pub struct Hotkey {
+    pub modifiers: HashSet<VirtualKey>,
+    pub trigger: VirtualKey
+}
+
+impl Hotkey {
+    pub fn new<T: IntoIterator<Item = VirtualKey>>(modifiers: T, trigger: VirtualKey) -> Self {
+        Self { modifiers: HashSet::from_iter(modifiers), trigger}
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, Data)]
+pub struct Config {
+    pub hotkey: Hotkey,
+    pub blacklist: HashSet<VirtualKey>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            hotkey: Hotkey::new(None, VirtualKey::Apps),
+            blacklist: HashSet::from([
+                VirtualKey::VolumeDown,
+                VirtualKey::VolumeUp,
+                VirtualKey::VolumeMute,
+                VirtualKey::MediaStop,
+                VirtualKey::MediaPrevTrack,
+                VirtualKey::MediaPlayPause,
+                VirtualKey::MediaNextTrack
+            ].as_slice()),
+        }
+    }
+}
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Data)]
 enum ConnectionState {

@@ -8,11 +8,12 @@ edition = "2021"
 
 [dependencies]
 num_enum = "0.5"
+tracing = "0.1"
 serde = { version = "1", optional = true, features = ["derive"]  }
-log = "0.4"
+druid = { version = "0.8", optional = true }
 
 [dependencies.windows]
-version = "0.44"
+version = "0.46"
 features = [
     "Win32_Foundation",
     "Win32_UI_Input_KeyboardAndMouse",

@@ -102,6 +102,7 @@ pub enum KeyState {
 /// See [Virtual-Key Codes](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx) for more information.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, TryFromPrimitive, IntoPrimitive)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "druid", derive(druid::Data))]
 #[repr(u8)]
 pub enum VirtualKey {
     LButton                      = 0x01,
