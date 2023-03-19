@@ -23,7 +23,7 @@ impl Theme for LightTheme {
     }
 }*/
 
-
+#[allow(dead_code)]
 pub enum Theme {
     Light, Dark
 }

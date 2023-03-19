@@ -2,9 +2,11 @@
 
 mod theme;
 
+use std::time::Duration;
 use druid::widget::{Button, Flex, Label};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use error_tools::log::LogResultExt;
+use tokio::runtime::{Builder, Runtime};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
@@ -42,21 +44,8 @@ pub fn main() {
 
     let launcher = AppLauncher::with_window(window);
 
-    /*
-    let event_sink = launcher.get_external_handle();
-    let _hook = InputHook::register(move |event| {
-        if let Some(KeyEvent {key, state: KeyState::Pressed}) = event.to_key_event() {
-            event_sink.add_idle_callback(move |data: &mut Key| {
-                *data = Key(key);
-            });
-        }
-
-        true
-    }).unwrap();
-     */
-
     launcher
-        .delegate(NetworkHandler::new())
+        .delegate(RuntimeDelegate::new())
         .configure_env(|env, _| theme::setup_theme(Theme::Light, env))
         .launch(AppState::default())
         .expect("launch failed");
@@ -65,46 +54,82 @@ pub fn main() {
 fn make_ui() -> impl Widget<AppState> {
     Flex::column()
         .with_child(Label::dynamic(|data: &AppState, _| format!("{:?}", data.connection_state)))
-        .with_child(Button::new("Change")
+        .with_child(Button::dynamic(|data: &AppState, _| match data.connection_state {
+            ConnectionState::Connected => "Disconnect",
+            ConnectionState::Disconnected => "Connect"
+        }.to_string())
             .on_click(|ctx, _, _| ctx.submit_command(MSG.with(()))))
         .center()
 }
 
 pub const MSG: Selector<()> = Selector::new("inputshare.msg");
+pub const RESET: Selector<()> = Selector::new("inputshare.reset");
 
-struct NetworkHandler {
-    hook: Option<InputHook>
+struct RuntimeDelegate {
+    hook: Option<InputHook>,
+    runtime: Runtime
 }
 
-impl NetworkHandler {
+impl RuntimeDelegate {
 
     fn new() -> Self {
         Self {
             hook: None,
+            runtime: Builder::new_multi_thread()
+                .enable_all()
+                .worker_threads(1)
+                .build()
+                .expect("Could not start async runtime"),
         }
     }
 
 }
 
-impl AppDelegate<AppState> for NetworkHandler {
-    fn command(&mut self, _ctx: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
-        if cmd.is(MSG) {
-            self.hook = match self.hook.take() {
-                None => InputHook::register(|event| {
-                    if let Some(KeyEvent {key, state: KeyState::Pressed}) = event.to_key_event() {
-                        tracing::info!("{:?}", key)
-                    }
-                    true
-                }).log_ok("Failed to register hook"),
-                Some(_) => None
-            };
-            data.connection_state = match self.hook.is_some() {
-                true => ConnectionState::Connected,
-                false => ConnectionState::Disconnected
-            };
-            Handled::Yes
-        } else {
-            Handled::No
+impl AppDelegate<AppState> for RuntimeDelegate {
+    fn command(&mut self, ctx: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
+        match cmd {
+            cmd if cmd.is(MSG) => {
+                self.hook = match self.hook.take() {
+                    None => {
+                        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+                        let hook = InputHook::register(move |event| {
+                            if let Some(KeyEvent {key, state: KeyState::Pressed}) = event.to_key_event() {
+                                sender.send(key)
+                                    .log_ok("Could not send message to runtime");
+                            }
+                            true
+                        }).log_ok("Failed to register hook");
+                        if hook.is_some() {
+                            self.runtime.spawn(async move {
+                                while let Some(key) = receiver.recv().await {
+                                    tracing::info!("New key: {:?}", key);
+                                }
+                                tracing::trace!("Ending async task");
+                            });
+                            let sink = ctx.get_external_handle();
+                            self.runtime.spawn(async move {
+                                tokio::time::sleep(Duration::from_secs(3)).await;
+                                tracing::trace!("removing hook");
+                                sink.submit_command(RESET, (), Target::Auto)
+                                    .log_ok("Failed to submit reset command");
+                            });
+                        }
+                        hook
+                    },
+                    Some(_) => None
+                };
+                data.connection_state = match self.hook.is_some() {
+                    true => ConnectionState::Connected,
+                    false => ConnectionState::Disconnected
+                };
+                Handled::Yes
+            },
+            cmd if cmd.is(RESET) => {
+                self.hook = None;
+                data.connection_state = ConnectionState::Disconnected;
+                Handled::Yes
+            }
+            _ => Handled::No
         }
     }
 }
