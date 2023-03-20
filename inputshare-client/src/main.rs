@@ -3,10 +3,10 @@
 mod theme;
 mod hook;
 mod conversions;
+mod popup;
 
-use std::rc::Rc;
-use druid::widget::{Button, Either, Flex, Label, SizedBox, ZStack};
-use druid::{AppDelegate, AppLauncher, Color, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
+use druid::widget::{Button, Flex, Label, SizedBox};
+use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
 use tokio::runtime::{Builder, Runtime};
@@ -19,6 +19,7 @@ use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc::UnboundedReceiver;
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::hook::HookEvent;
+use crate::popup::{Popup};
 use crate::theme::Theme;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data)]
@@ -89,7 +90,7 @@ pub fn main() {
     error_tools::gui::set_gui_panic_hook();
 
     let window = WindowDesc::new(make_ui())
-        .window_size((300.0, 190.0))
+        .window_size((300.0, 230.0))
         .title("InputShare Client");
 
     AppLauncher::with_window(window)
@@ -100,21 +101,7 @@ pub fn main() {
 }
 
 fn make_ui() -> impl Widget<AppState> {
-    let ui = main_ui();
-    let popup = Flex::column()
-        .with_child(Label::new("Hello"))
-        .with_child(Button::new("Back").on_click(|_, data: &mut AppState, _| data.popup = false))
-        .center();
-    let poped = ZStack::new(ui.disabled_if(|_, _|true).foreground(Color::rgba8(0, 0, 0, 128)))
-        .with_centered_child(SizedBox::new(popup)
-            .fix_size(200.0, 100.0)
-            .background(druid::theme::BACKGROUND_DARK)
-            .rounded(5.0));
-    Either::new(|data: &AppState, _| data.popup, poped, main_ui())
-}
-
-fn main_ui() -> impl Widget<AppState> {
-    Flex::column()
+    let ui = Flex::column()
         .with_child(Label::dynamic(|data: &AppState, _| match data.connection_state {
             ConnectionState::Connected(Side::Local) => "Local",
             ConnectionState::Connected(Side::Remote) => "Remote",
@@ -129,9 +116,21 @@ fn main_ui() -> impl Widget<AppState> {
             .with_text_size(17.0))
             .fix_size(250.0, 65.0)
             .on_click(|ctx, _, _| ctx.submit_command(MSG.with(()))))
+        .with_default_spacer()
         .with_child(Button::new("popup")
+            .fix_width(250.0)
             .on_click(|_, data: &mut AppState, _ | data.popup = true))
-        .center()
+        .center();
+    let popup = Flex::column()
+        .with_child(Label::new("Hello"))
+        .with_child(Button::new("Back").on_click(|_, data: &mut AppState, _| data.popup = false))
+        .center();
+    let popup = SizedBox::new(popup)
+        .width(200.0)
+        .height(100.0)
+        .background(druid::theme::BACKGROUND_DARK)
+        .rounded(5.0);
+    Popup::new(|data: &AppState, _| data.popup, popup, ui)
 }
 
 pub const MSG: Selector<()> = Selector::new("inputshare.msg");
