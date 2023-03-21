@@ -7,10 +7,35 @@ use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-type HookFn = dyn FnMut(InputEvent) -> bool;
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum HookAction {
+    #[default]
+    Continue,
+    Block
+}
+
+#[repr(transparent)]
+pub struct HookFn(Box<dyn FnMut(InputEvent) -> HookAction>);
+
+impl HookFn {
+
+    pub fn new(callback: impl FnMut(InputEvent) -> HookAction + 'static) -> Self {
+        Self(Box::new(callback))
+    }
+
+    fn handle(&mut self, event: InputEvent) -> HookAction {
+        self.0(event)
+    }
+}
+
+impl<F: FnMut(InputEvent) -> HookAction + 'static> From<F> for HookFn {
+    fn from(value: F) -> Self {
+        HookFn::new(value)
+    }
+}
 
 thread_local! {
-    static HOOK: Cell<Option<Box<HookFn>>> = Cell::default();
+    static HOOK: Cell<Option<HookFn>> = Cell::default();
 }
 
 pub struct InputHook {
@@ -20,7 +45,7 @@ pub struct InputHook {
 
 impl InputHook {
     #[must_use = "The hook will immediately be unregistered and not work."]
-    pub fn register(callback: impl FnMut(InputEvent) -> bool + 'static) -> WinResult<InputHook> {
+    pub fn register(callback: impl Into<HookFn>) -> WinResult<InputHook> {
         HOOK.with(|state| {
             assert!(
                 state.take().is_none(),
@@ -34,7 +59,7 @@ impl InputHook {
             let mouse = unsafe {
                 SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), HINSTANCE::default(), 0)?
             };
-            state.set(Some(Box::new(callback)));
+            state.set(Some(callback.into()));
             Ok(InputHook {
                 keyboard,
                 mouse,
@@ -64,17 +89,17 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
         };
 
         if let Some(event) = event {
-            let mut handled = true;
+            let mut handled = HookAction::Continue;
             HOOK.with(|state| {
                 match state.take() {
                     None => tracing::warn!("Keyboard hook callback was already taken"),
                     Some(mut callback) => {
-                        handled = !callback(event);
+                        handled = callback.handle(event);
                         state.set(Some(callback));
                     }
                 }
             });
-            if handled {
+            if handled == HookAction::Block {
                 return LRESULT(1);
             }
         }
@@ -103,17 +128,17 @@ unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam
         };
 
         if let Some(event) = event {
-            let mut handled = true;
+            let mut handled = HookAction::Continue;
             HOOK.with(|state| {
                 match state.take() {
                     None => tracing::warn!("Mouse hook callback was already taken"),
                     Some(mut callback) => {
-                        handled = !callback(event);
+                        handled = callback.handle(event);
                         state.set(Some(callback));
                     }
                 }
             });
-            if handled {
+            if handled == HookAction::Block {
                 return LRESULT(1);
             }
         }

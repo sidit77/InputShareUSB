@@ -1,6 +1,6 @@
 use error_tools::log::LogResultExt;
 use tokio::sync::mpsc::UnboundedSender;
-use yawi::{Input, InputEvent, KeyEvent, KeyState, send_inputs, VirtualKey};
+use yawi::{HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, send_inputs, VirtualKey};
 use crate::Config;
 use crate::hook::util::VirtualKeySet;
 
@@ -10,7 +10,7 @@ pub enum HookEvent {
     Input(InputEvent)
 }
 
-pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> impl FnMut(InputEvent) -> bool + 'static {
+pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> HookFn {
     let send = move |event| sender
         .send(event)
         .log_ok("Could not send event");
@@ -26,10 +26,10 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
     let mut hotkey_pressed = false;
 
     send(HookEvent::Captured(captured));
-    move |event|{
+    HookFn::new(move |event|{
         let key_event = event.to_key_event();
         if is_blacklisted(blacklist, key_event) {
-            return true;
+            return HookAction::Continue;
         }
 
         let should_handle = is_repeated_event(&mut pressed_keys, key_event);
@@ -43,11 +43,11 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
                     }
                     captured = !captured;
                     send(HookEvent::Captured(captured));
-                    return false;
+                    return HookAction::Block;
                 }
                 if hotkey_pressed && key == trigger && state == KeyState::Released {
                     hotkey_pressed = false;
-                    return false;
+                    return HookAction::Block;
                 }
             }
             if captured {
@@ -65,8 +65,11 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> i
             }
         }
 
-        !captured
-    }
+        match captured {
+            true => HookAction::Block,
+            false => HookAction::Continue
+        }
+    })
 }
 
 fn is_blacklisted(blacklist: VirtualKeySet, event: Option<KeyEvent>) -> bool {
