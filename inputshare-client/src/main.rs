@@ -5,7 +5,6 @@ mod hook;
 mod conversions;
 mod popup;
 
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use druid::widget::{Button, Flex, Label, SizedBox};
@@ -19,9 +18,9 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputEvent, InputHook, ScrollDirection, VirtualKey};
+use yawi::{HookFn, InputEvent, InputHook, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::hook::HookEvent;
 use crate::popup::{Popup};
@@ -71,6 +70,7 @@ enum Side {
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Data)]
 enum ConnectionState {
     Connected(Side),
+    Connecting,
     #[default]
     Disconnected
 }
@@ -111,17 +111,20 @@ fn make_ui() -> impl Widget<AppState> {
         .with_child(Label::dynamic(|data: &AppState, _| match data.connection_state {
             ConnectionState::Connected(Side::Local) => "Local",
             ConnectionState::Connected(Side::Remote) => "Remote",
-            ConnectionState::Disconnected => "Disconnected"
+            ConnectionState::Disconnected => "Disconnected",
+            ConnectionState::Connecting => "Connecting"
         }.to_string())
             .with_text_size(25.0))
         .with_spacer(20.0)
         .with_child(Button::from_label(Label::dynamic(|data: &AppState, _| match data.connection_state {
             ConnectionState::Connected(_) => "Disconnect",
-            ConnectionState::Disconnected => "Connect"
+            ConnectionState::Disconnected => "Connect",
+            ConnectionState::Connecting => "Connecting"
         }.to_string())
             .with_text_size(17.0))
             .fix_size(250.0, 65.0)
-            .on_click(|ctx, _, _| ctx.submit_command(MSG.with(()))))
+            .on_click(|ctx, _, _| ctx.submit_command(MSG.with(())))
+            .disabled_if(|data: &AppState, _ | data.connection_state == ConnectionState::Connecting))
         .with_default_spacer()
         .with_child(Button::new("popup")
             .fix_width(250.0)
@@ -140,6 +143,7 @@ fn make_ui() -> impl Widget<AppState> {
 }
 
 pub const MSG: Selector<()> = Selector::new("inputshare.msg");
+pub const INSTALL_HOOK: Selector<UnboundedSender<HookEvent>> = Selector::new("inputshare.install_hook");
 pub const RESET: Selector<()> = Selector::new("inputshare.reset");
 
 struct RuntimeDelegate {
@@ -166,31 +170,29 @@ impl AppDelegate<AppState> for RuntimeDelegate {
     fn command(&mut self, ctx: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
         match cmd {
             cmd if cmd.is(MSG) => {
-                data.connection_state = ConnectionState::Disconnected;
-                self.hook = match self.hook.take() {
-                    None => {
-                        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-                        let hook = InputHook::register(hook::create_callback(&data.config, sender))
-                            .log_ok("Failed to register hook");
-                        if hook.is_some() {
-                            let handle = ctx.get_external_handle();
-                            self.runtime.spawn(async move {
-                                connection(receiver, &handle)
-                                    .await
-                                    .log_ok("Connection error");
-                                handle.submit_command(RESET, Box::new(()),Target::Auto)
-                                    .log_ok("Can not submit reset command");
-                            });
-                        }
-                        hook
-                    },
-                    Some(_) => None
-                };
+                self.hook = None;
+                if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected{
+                    let handle = ctx.get_external_handle();
+                    data.connection_state = ConnectionState::Connecting;
+                    self.runtime.spawn(async move {
+                        connection(&handle)
+                            .await
+                            .log_ok("Connection error");
+                        handle.submit_command(RESET, Box::new(()),Target::Auto)
+                            .log_ok("Can not submit reset command");
+                    });
+                }
                 Handled::Yes
             },
             cmd if cmd.is(RESET) => {
                 self.hook = None;
                 data.connection_state = ConnectionState::Disconnected;
+                Handled::Yes
+            },
+            cmd if cmd.is(INSTALL_HOOK) => {
+                let sender = cmd.get_unchecked(INSTALL_HOOK).clone();
+                self.hook = InputHook::register(hook::create_callback(&data.config, sender))
+                                             .log_ok("Failed to register hook");
                 Handled::Yes
             }
             _ => Handled::No
@@ -198,7 +200,7 @@ impl AppDelegate<AppState> for RuntimeDelegate {
     }
 }
 
-async fn connection(mut receiver: UnboundedReceiver<HookEvent>, sink: &ExtEventSink) -> anyhow::Result<()> {
+async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -213,6 +215,9 @@ async fn connection(mut receiver: UnboundedReceiver<HookEvent>, sink: &ExtEventS
 
     let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
     tracing::debug!("Connected to {}", connection.remote_address());
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    sink.submit_command(INSTALL_HOOK, Box::new(sender), Target::Auto)
+        .log_ok("failed to install hook");
     loop {
         let connection_error = async {
             Err(connection.closed().await)
