@@ -1136,6 +1136,7 @@ dependencies = [
  "druid",
  "error-tools",
  "futures-lite",
+ "futures-util",
  "inputshare-common",
  "quinn",
  "rustls",

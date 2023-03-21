@@ -11,14 +11,15 @@ use druid::widget::{Button, Flex, Label, SizedBox};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
-use futures_lite::FutureExt;
-use quinn::{ClientConfig, Connection, ConnectionError, Endpoint, TransportConfig};
+use futures_lite::FutureExt as LiteFutureEx;
+use futures_util::FutureExt;
+use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::runtime::{Builder, Runtime};
-use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::filter::{FilterExt, LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{HookFn, InputEvent, InputHook, ScrollDirection, VirtualKey};
+use yawi::{InputEvent, InputHook, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
@@ -215,54 +216,45 @@ async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
 
     let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
     tracing::debug!("Connected to {}", connection.remote_address());
-    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     sink.submit_command(INSTALL_HOOK, Box::new(sender), Target::Auto)
         .log_ok("failed to install hook");
-    loop {
-        let connection_error = async {
-            Err(connection.closed().await)
-        };
-        let next_event = async {
-            receiver
-                .recv()
-                .await
-                .ok_or(ConnectionError::LocallyClosed)
-        };
-        match connection_error.or(next_event).await {
-            Ok(event) => match event {
-                HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
-                    data.connection_state = ConnectionState::Connected(match captured {
-                        true => Side::Remote,
-                        false => Side::Local
-                    });
-                }),
-                HookEvent::Input(event) => match event {
-                    InputEvent::MouseMoveEvent(_x, _y) => {
 
-                    }
-                    event => {
-                        let mut send = connection
-                            .open_uni()
-                            .await?;
+    handle_input(receiver, connection.clone(), sink)
+        .or(connection
+            .closed()
+            .map(|e|Err(e.into())))
+        .await?;
 
-                        send.write_all(format!("{:?}", event).as_bytes()).await?;
-                        send.finish().await?;
-                    }
-                }
-            }
-            Err(closed) => {
-                tracing::debug!("{:?}", closed);
-                break;
-            }
-        }
-    }
     tracing::trace!("Shutting down key handler");
 
     Ok(())
 }
 
-async fn forward_keys(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: ExtEventSink) -> anyhow::Result<()> {
+async fn handle_input(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: &ExtEventSink) -> anyhow::Result<()> {
+    while let Some(event) = receiver.recv().await {
+        match event {
+            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
+                data.connection_state = ConnectionState::Connected(match captured {
+                    true => Side::Remote,
+                    false => Side::Local
+                });
+            }),
+            HookEvent::Input(event) => match event {
+                InputEvent::MouseMoveEvent(_x, _y) => {
 
+                }
+                event => {
+                    let mut send = connection
+                        .open_uni()
+                        .await?;
+
+                    send.write_all(format!("{:?}", event).as_bytes()).await?;
+                    send.finish().await?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 
