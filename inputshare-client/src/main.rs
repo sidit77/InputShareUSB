@@ -5,12 +5,15 @@ mod hook;
 mod conversions;
 mod popup;
 
+use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 use druid::widget::{Button, Flex, Label, SizedBox};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
-use quinn::{ClientConfig, Endpoint};
+use futures_lite::FutureExt;
+use quinn::{ClientConfig, Connection, ConnectionError, Endpoint, TransportConfig};
 use tokio::runtime::{Builder, Runtime};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -200,38 +203,60 @@ async fn connection(mut receiver: UnboundedReceiver<HookEvent>, sink: &ExtEventS
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
         .with_no_client_auth();
+    let mut transport = TransportConfig::default();
+    transport.keep_alive_interval(Some(Duration::from_secs(1)));
 
-    let config = ClientConfig::new(Arc::new(crypto));
+    let mut config = ClientConfig::new(Arc::new(crypto));
+    config.transport_config(Arc::new(transport));
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
     endpoint.set_default_client_config(config);
 
     let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
     tracing::debug!("Connected to {}", connection.remote_address());
+    loop {
+        let connection_error = async {
+            Err(connection.closed().await)
+        };
+        let next_event = async {
+            receiver
+                .recv()
+                .await
+                .ok_or(ConnectionError::LocallyClosed)
+        };
+        match connection_error.or(next_event).await {
+            Ok(event) => match event {
+                HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
+                    data.connection_state = ConnectionState::Connected(match captured {
+                        true => Side::Remote,
+                        false => Side::Local
+                    });
+                }),
+                HookEvent::Input(event) => match event {
+                    InputEvent::MouseMoveEvent(_x, _y) => {
 
-    while let Some(event) = receiver.recv().await {
-        match event {
-            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
-                data.connection_state = ConnectionState::Connected(match captured {
-                    true => Side::Remote,
-                    false => Side::Local
-                });
-            }),
-            HookEvent::Input(event) => match event {
-                InputEvent::MouseMoveEvent(_x, _y) => {
+                    }
+                    event => {
+                        let mut send = connection
+                            .open_uni()
+                            .await?;
 
+                        send.write_all(format!("{:?}", event).as_bytes()).await?;
+                        send.finish().await?;
+                    }
                 }
-                event => {
-                    let mut send = connection
-                        .open_uni()
-                        .await?;
-
-                    send.write_all(format!("{:?}", event).as_bytes()).await?;
-                    send.finish().await?;
-                }
+            }
+            Err(closed) => {
+                tracing::debug!("{:?}", closed);
+                break;
             }
         }
     }
     tracing::trace!("Shutting down key handler");
+
+    Ok(())
+}
+
+async fn forward_keys(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: ExtEventSink) -> anyhow::Result<()> {
 
     Ok(())
 }

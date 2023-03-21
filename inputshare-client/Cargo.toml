@@ -14,6 +14,7 @@ anyhow = { version = "1", features = ["backtrace"] }
 error-tools = { git = "https://github.com/sidit77/error-tools.git", features = ["log", "gui"] }
 
 tokio = { version = "1", features = ["full"] }
+futures-lite = "1"
 quinn = "0.9"
 rustls = { version = "0.20", default-features = false, features = ["quic", "dangerous_configuration"] }
 
