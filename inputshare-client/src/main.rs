@@ -5,10 +5,12 @@ mod hook;
 mod conversions;
 mod popup;
 
+use std::sync::Arc;
 use druid::widget::{Button, Flex, Label, SizedBox};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
+use quinn::{ClientConfig, Endpoint};
 use tokio::runtime::{Builder, Runtime};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -80,8 +82,9 @@ struct AppState {
 pub fn main() {
     tracing_subscriber::registry()
         .with(Targets::new()
-            .with_default(LevelFilter::TRACE)
-            .with_target("druid", LevelFilter::DEBUG))
+            .with_default(LevelFilter::DEBUG)
+            .with_target("yawi", LevelFilter::TRACE)
+            .with_target("inputshare_client", LevelFilter::TRACE))
         .with(layer()
             .without_time())
         .init();
@@ -167,7 +170,14 @@ impl AppDelegate<AppState> for RuntimeDelegate {
                         let hook = InputHook::register(hook::create_callback(&data.config, sender))
                             .log_ok("Failed to register hook");
                         if hook.is_some() {
-                            self.runtime.spawn(key_handler(receiver, ctx.get_external_handle()));
+                            let handle = ctx.get_external_handle();
+                            self.runtime.spawn(async move {
+                                connection(receiver, &handle)
+                                    .await
+                                    .log_ok("Connection error");
+                                handle.submit_command(RESET, Box::new(()),Target::Auto)
+                                    .log_ok("Can not submit reset command");
+                            });
                         }
                         hook
                     },
@@ -183,6 +193,47 @@ impl AppDelegate<AppState> for RuntimeDelegate {
             _ => Handled::No
         }
     }
+}
+
+async fn connection(mut receiver: UnboundedReceiver<HookEvent>, sink: &ExtEventSink) -> anyhow::Result<()> {
+    let crypto = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_custom_certificate_verifier(SkipServerVerification::new())
+        .with_no_client_auth();
+
+    let config = ClientConfig::new(Arc::new(crypto));
+    let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
+    endpoint.set_default_client_config(config);
+
+    let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
+    tracing::debug!("Connected to {}", connection.remote_address());
+
+    while let Some(event) = receiver.recv().await {
+        match event {
+            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
+                data.connection_state = ConnectionState::Connected(match captured {
+                    true => Side::Remote,
+                    false => Side::Local
+                });
+            }),
+            HookEvent::Input(event) => match event {
+                InputEvent::MouseMoveEvent(_x, _y) => {
+
+                }
+                event => {
+                    let mut send = connection
+                        .open_uni()
+                        .await?;
+
+                    send.write_all(format!("{:?}", event).as_bytes()).await?;
+                    send.finish().await?;
+                }
+            }
+        }
+    }
+    tracing::trace!("Shutting down key handler");
+
+    Ok(())
 }
 
 async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventSink) {
@@ -219,4 +270,27 @@ async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventS
         }
     }
     tracing::trace!("Shutting down key handler");
+}
+
+
+struct SkipServerVerification;
+
+impl SkipServerVerification {
+    fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl rustls::client::ServerCertVerifier for SkipServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
 }
