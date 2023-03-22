@@ -4,27 +4,30 @@ mod theme;
 mod hook;
 mod conversions;
 mod popup;
+mod sender;
 
 use std::sync::Arc;
 use std::time::Duration;
+use bytes::Bytes;
 use druid::widget::{Button, Flex, Label, SizedBox};
 use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
 use error_tools::log::LogResultExt;
-use futures_lite::FutureExt as LiteFutureEx;
-use futures_util::FutureExt;
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::runtime::{Builder, Runtime};
-use tracing_subscriber::filter::{FilterExt, LevelFilter, Targets};
+use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputEvent, InputHook, ScrollDirection, VirtualKey};
+use yawi::{InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
+use tokio::{select};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::time::{Instant};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::hook::HookEvent;
 use crate::popup::{Popup};
+use crate::sender::InputSender;
 use crate::theme::Theme;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data)]
@@ -202,6 +205,104 @@ impl AppDelegate<AppState> for RuntimeDelegate {
 }
 
 async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
+    let connection = connect().await?;
+    tracing::debug!("Connected to {}", connection.remote_address());
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    sink.submit_command(INSTALL_HOOK, Box::new(sender), Target::Auto)
+        .log_ok("failed to install hook");
+
+    handle_input(receiver, connection.clone(), sink).await?;
+        //.or(connection
+        //    .closed()
+        //    .map(|e|Err(e.into())))
+        //.await?;
+
+    tracing::trace!("Shutting down key handler");
+
+    Ok(())
+}
+
+async fn handle_input(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: &ExtEventSink) -> anyhow::Result<()> {
+    let mut sender = InputSender::new(1.0);
+    let mut deadline = None;
+    loop {
+        let timeout = async move {
+            match deadline {
+                Some(deadline) => tokio::time::sleep_until(deadline).await,
+                None => futures_lite::future::pending().await
+            };
+        };
+        select! {
+            datagram = connection.read_datagram() => {
+                let datagram: Bytes = datagram?;
+                sender.read_packet(&datagram)?;
+            },
+            event = receiver.recv() => match event {
+                Some(event) => process_hook_event(&mut sender, sink, event),
+                None => break
+            },
+            _ = timeout => {
+                let msg = sender.write_packet()?;
+                debug_assert!(msg.len() <= connection.max_datagram_size().unwrap());
+                connection.send_datagram(Bytes::copy_from_slice(msg))?;
+                deadline = Some(Instant::now() + Duration::from_millis(10));
+            }
+        };
+        deadline = match sender.in_sync() {
+            true => None,
+            false => Some(deadline.unwrap_or_else(Instant::now))
+        };
+    }
+
+    Ok(())
+}
+
+fn process_hook_event(sender: &mut InputSender, sink: &ExtEventSink, event: HookEvent) {
+    match event {
+        HookEvent::Captured(captured) => {
+            sink.add_idle_callback(move |data: &mut AppState| {
+                data.connection_state = ConnectionState::Connected(match captured {
+                    true => Side::Remote,
+                    false => Side::Local
+                });
+            });
+            sender.reset();
+        },
+        HookEvent::Input(event) => match event {
+            InputEvent::MouseMoveEvent(x, y) => {
+                sender.move_mouse(x as i64, y as i64);
+            }
+            InputEvent::KeyboardKeyEvent(vk, sc, ks) => match wsc_to_hkc(sc) {
+                Some(kc) => match ks {
+                    KeyState::Pressed => sender.press_key(kc),
+                    KeyState::Released => sender.release_key(kc)
+                },
+                None => match wsc_to_cdc(sc){
+                    Some(cdc) => match ks {
+                        KeyState::Pressed => sender.press_consumer_device(cdc),
+                        KeyState::Released => sender.release_consumer_device(cdc)
+                    },
+                    None => if! matches!(sc, 0x21d) {
+                        tracing::warn!("Unknown key: {} ({:x})", vk, sc)
+                    }
+                }
+            }
+            InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
+                Some(button) => match ks {
+                    KeyState::Pressed => sender.press_mouse_button(button),
+                    KeyState::Released => sender.release_mouse_button(button)
+                },
+                None => tracing::warn!("Unknown mouse button: {}", mb)
+            }
+            InputEvent::MouseWheelEvent(sd) => match sd {
+                ScrollDirection::Horizontal(amount) => sender.scroll_horizontal(f32_to_i8(amount)),
+                ScrollDirection::Vertical(amount) => sender.scroll_vertical(f32_to_i8(amount))
+            }
+        }
+    }
+}
+
+async fn connect() -> anyhow::Result<Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -215,49 +316,9 @@ async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     endpoint.set_default_client_config(config);
 
     let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
-    tracing::debug!("Connected to {}", connection.remote_address());
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    sink.submit_command(INSTALL_HOOK, Box::new(sender), Target::Auto)
-        .log_ok("failed to install hook");
-
-    handle_input(receiver, connection.clone(), sink)
-        .or(connection
-            .closed()
-            .map(|e|Err(e.into())))
-        .await?;
-
-    tracing::trace!("Shutting down key handler");
-
-    Ok(())
+    Ok(connection)
 }
-
-async fn handle_input(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: &ExtEventSink) -> anyhow::Result<()> {
-    while let Some(event) = receiver.recv().await {
-        match event {
-            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
-                data.connection_state = ConnectionState::Connected(match captured {
-                    true => Side::Remote,
-                    false => Side::Local
-                });
-            }),
-            HookEvent::Input(event) => match event {
-                InputEvent::MouseMoveEvent(_x, _y) => {
-
-                }
-                event => {
-                    let mut send = connection
-                        .open_uni()
-                        .await?;
-
-                    send.write_all(format!("{:?}", event).as_bytes()).await?;
-                    send.finish().await?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
+/*
 async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventSink) {
     while let Some(event) = receiver.recv().await {
         match event {
@@ -293,7 +354,7 @@ async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventS
     }
     tracing::trace!("Shutting down key handler");
 }
-
+*/
 
 struct SkipServerVerification;
 
