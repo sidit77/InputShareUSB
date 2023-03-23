@@ -1,7 +1,10 @@
 use std::{env, fs};
-use std::io::{Error, ErrorKind, Result};
+use std::fs::{File, OpenOptions};
+use std::io::{Error, ErrorKind, Result, Write};
+use std::num::NonZeroU8;
 use std::path::Path;
 use std::os::unix;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 const KEYBOARD_REPORT_DESC: &[u8] = &[
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
@@ -105,8 +108,8 @@ const CONSUMER_REPORT_DESC: &[u8] = &[
     0xC0,              // End Collection
 ];
 
-pub fn enable_hid() -> Result<()>{
-    log::info!("Enabling HID device");
+fn enable_hid() -> Result<()>{
+    tracing::info!("Enabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/")?;
     fs::create_dir("g1")?;
@@ -173,8 +176,8 @@ pub fn enable_hid() -> Result<()>{
     Ok(())
 }
 
-pub fn disable_hid() -> Result<()>{
-    log::info!("Disabling HID device");
+fn disable_hid() -> Result<()>{
+    tracing::info!("Disabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/g1/")?;
 
@@ -196,4 +199,342 @@ pub fn disable_hid() -> Result<()>{
     fs::remove_dir("g1")?;
 
     Ok(())
+}
+
+static CONFIG_FS_REF_COUNT: AtomicU32 = AtomicU32::new(0);
+
+#[derive(Debug)]
+struct ConfigFsHandle;
+
+impl ConfigFsHandle {
+    fn new() -> Result<Self> {
+        if CONFIG_FS_REF_COUNT.fetch_add(1, Ordering::SeqCst) <= 0 {
+            enable_hid()?;
+        }
+        Ok(Self)
+    }
+}
+
+impl Drop for ConfigFsHandle {
+    fn drop(&mut self) {
+        if CONFIG_FS_REF_COUNT.fetch_sub(1, Ordering::SeqCst) <= 1 {
+            if let Err(err) = disable_hid() {
+                tracing::error!("Could not remove config fs configuration: {}", err);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Keyboard {
+    _handle: ConfigFsHandle,
+    device: File,
+    pressed_keys: Vec<HidKeyCode>,
+    pressed_modifiers: HidModifierKeys,
+}
+
+impl Keyboard {
+
+    pub fn new() -> Result<Self> {
+        let _handle = ConfigFsHandle::new()?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg0")?;
+        Ok(Self {
+            _handle,
+            device,
+            pressed_keys: Vec::new(),
+            pressed_modifiers: HidModifierKeys::empty()
+        })
+    }
+
+    fn send_report(&mut self) -> Result<()> {
+        let mut report = [0u8; 8];
+        report[0] = self.pressed_modifiers.bits();
+
+        for (i, key) in self.pressed_keys.iter().enumerate().take(6) {
+            report[2 + i] = (*key).into()
+        }
+        tracing::trace!("Wring keyboard report: {:?}", &report);
+        self.device.write_all(&report)
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        self.pressed_keys.clear();
+        self.pressed_modifiers = HidModifierKeys::empty();
+        self.send_report()
+    }
+
+    pub fn press_key(&mut self, key: HidKeyCode) -> Result<()> {
+        match key.try_into() {
+            Ok(modifier) => self.pressed_modifiers.insert(modifier),
+            Err(_) => self.pressed_keys.push(key)
+        }
+        self.send_report()
+    }
+
+    pub fn release_key(&mut self, key: HidKeyCode) -> Result<()> {
+        match key.try_into() {
+            Ok(modifier) => self.pressed_modifiers.remove(modifier),
+            Err(_) => self.pressed_keys.retain(|k| *k != key)
+        }
+        self.send_report()
+    }
+
+}
+
+#[derive(Debug)]
+pub struct ConsumerDevice {
+    _handle: ConfigFsHandle,
+    device: File,
+    pressed_keys: ConsumerDeviceButtons,
+}
+
+impl ConsumerDevice {
+
+    pub fn new() -> Result<Self> {
+        let _handle = ConfigFsHandle::new()?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2")?;
+        Ok(Self {
+            _handle,
+            device,
+            pressed_keys: ConsumerDeviceButtons::empty()
+        })
+    }
+
+    fn send_report(&mut self) -> Result<()> {
+        tracing::trace!("Wring consumer device report: {:?}", &self.pressed_keys.bits().to_le_bytes());
+        self.device.write_all(&self.pressed_keys.bits().to_le_bytes())
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        self.pressed_keys = ConsumerDeviceButtons::empty();
+        self.send_report()
+    }
+
+    pub fn press_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
+        match key.try_into() {
+            Ok(key) => {
+                self.pressed_keys.insert(key);
+                self.send_report()
+            },
+            Err(()) => Ok(())
+        }
+    }
+
+    pub fn release_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
+        match key.try_into() {
+            Ok(key) => {
+                self.pressed_keys.remove(key);
+                self.send_report()
+            },
+            Err(()) => Ok(())
+        }
+    }
+
+}
+
+#[derive(Debug)]
+pub struct Mouse {
+    _handle: ConfigFsHandle,
+    device: File,
+    pressed_buttons: HidMouseButtons,
+    tess_factor: i16
+}
+
+impl Mouse {
+
+    pub fn new(tess_factor: NonZeroU8) -> Result<Self> {
+        let _handle = ConfigFsHandle::new()?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
+        Ok(Self {
+            _handle,
+            device,
+            pressed_buttons: HidMouseButtons::empty(),
+            tess_factor: i16::from(tess_factor.get())
+        })
+    }
+
+    fn send_report(&mut self, dx: i16, dy: i16, dv: i8, dh: i8) -> Result<()> {
+        let mut report = [0u8; 7];
+        report[0] = self.pressed_buttons.bits();
+
+        report[1..=2].copy_from_slice(&dx.to_le_bytes());
+        report[3..=4].copy_from_slice(&dy.to_le_bytes());
+        report[5..=5].copy_from_slice(&dv.to_le_bytes());
+        report[6..=6].copy_from_slice(&dh.to_le_bytes());
+
+        tracing::trace!("Wring mouse report: {:?}", &report);
+        self.device.write_all(&report)
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        self.pressed_buttons = HidMouseButtons::empty();
+        self.send_report(0,0,0,0)
+    }
+
+    pub fn press_button(&mut self, button: HidButtonCode) -> Result<()> {
+        match button.try_into() {
+            Ok(button) => {
+                self.pressed_buttons.insert(button);
+                self.send_report(0, 0,0,0)
+            },
+            Err(_) => Ok(())
+        }
+    }
+
+    pub fn release_button(&mut self, button: HidButtonCode) -> Result<()> {
+        match button.try_into() {
+            Ok(button) => {
+                self.pressed_buttons.remove(button);
+                self.send_report(0, 0,0,0)
+            },
+            Err(_) => Ok(())
+        }
+    }
+
+    pub fn move_by(&mut self, mut dx: i16, mut dy: i16) -> Result<()> {
+        let sx = abs_max(dx / self.tess_factor, dx.signum());
+        let sy = abs_max(dy / self.tess_factor, dy.signum());
+        while dx != 0 || dy != 0 {
+            let tx = abs_min(dx, sx);
+            let ty = abs_min(dy, sy);
+            self.send_report(tx, ty, 0,0)?;
+            dx -= tx;
+            dy -= ty;
+        }
+        Ok(())
+    }
+
+    pub fn scroll_vertical(&mut self, amount: i8) -> Result<()> {
+        self.send_report(0, 0, amount,0)
+    }
+
+    pub fn scroll_horizontal(&mut self, amount: i8) -> Result<()> {
+        self.send_report(0, 0, 0, amount)
+    }
+
+}
+
+fn abs_max(a: i16, b: i16) -> i16 {
+    if a.abs() >= b.abs() {
+        a
+    } else {
+        b
+    }
+}
+
+fn abs_min(a: i16, b: i16) -> i16 {
+    if a.abs() <= b.abs() {
+        a
+    } else {
+        b
+    }
+}
+
+pub use flags::{HidMouseButtons, HidModifierKeys, ConsumerDeviceButtons};
+use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode};
+
+//#[allow(non_upper_case_globals)]
+pub mod flags {
+    use bitflags::bitflags;
+    bitflags! {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct HidModifierKeys: u8 {
+            const LCtrl   = 0x01;
+            const LShift  = 0x02;
+            const LAlt    = 0x04;
+            const LMeta   = 0x08;
+            const RCtrl   = 0x10;
+            const RShift  = 0x20;
+            const RAlt    = 0x40;
+            const RMeta   = 0x80;
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct HidMouseButtons: u8 {
+            const LButton = 0x01;
+            const RButton = 0x02;
+            const MButton = 0x04;
+            const Button4 = 0x08;
+            const Button5 = 0x10;
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct ConsumerDeviceButtons: u16 {
+            const NextTrack        = 0x0001;
+            const PreviousTrack    = 0x0002;
+            const Stop             = 0x0004;
+            const PlayPause        = 0x0008;
+            const Mute             = 0x0010;
+            const VolumeUp         = 0x0020;
+            const VolumeDown       = 0x0040;
+            const BrowserHome      = 0x0080;
+            const MyComputer       = 0x0100;
+            const Calculator       = 0x0200;
+            const BrowserFavorites = 0x0400;
+            const BrowserSearch    = 0x0800;
+            const BrowserStop      = 0x1000;
+            const BrowserBack      = 0x2000;
+            const MediaSelect      = 0x4000;
+            const Mail             = 0x8000;
+        }
+    }
+}
+
+impl TryFrom<ConsumerDeviceCode> for ConsumerDeviceButtons {
+    type Error = ();
+
+    fn try_from(value: ConsumerDeviceCode) -> std::result::Result<Self, Self::Error> {
+        match value {
+            ConsumerDeviceCode::NextTrack => Ok(ConsumerDeviceButtons::NextTrack),
+            ConsumerDeviceCode::PreviousTrack => Ok(ConsumerDeviceButtons::PreviousTrack),
+            ConsumerDeviceCode::Stop => Ok(ConsumerDeviceButtons::Stop),
+            ConsumerDeviceCode::PlayPause => Ok(ConsumerDeviceButtons::PlayPause),
+            ConsumerDeviceCode::Mute => Ok(ConsumerDeviceButtons::Mute),
+            ConsumerDeviceCode::VolumeUp => Ok(ConsumerDeviceButtons::VolumeUp),
+            ConsumerDeviceCode::VolumeDown => Ok(ConsumerDeviceButtons::VolumeDown),
+            ConsumerDeviceCode::MediaSelect => Ok(ConsumerDeviceButtons::MediaSelect),
+            ConsumerDeviceCode::Mail => Ok(ConsumerDeviceButtons::Mail),
+            ConsumerDeviceCode::Calculator => Ok(ConsumerDeviceButtons::Calculator),
+            ConsumerDeviceCode::MyComputer => Ok(ConsumerDeviceButtons::MyComputer),
+            ConsumerDeviceCode::BrowserSearch => Ok(ConsumerDeviceButtons::BrowserSearch),
+            ConsumerDeviceCode::BrowserHome => Ok(ConsumerDeviceButtons::BrowserHome),
+            ConsumerDeviceCode::BrowserBack => Ok(ConsumerDeviceButtons::BrowserBack),
+            ConsumerDeviceCode::BrowserStop => Ok(ConsumerDeviceButtons::BrowserStop),
+            ConsumerDeviceCode::BrowserFavorites => Ok(ConsumerDeviceButtons::BrowserFavorites),
+            _ => Err(())
+        }
+    }
+}
+
+impl TryFrom<HidButtonCode> for HidMouseButtons {
+    type Error = ();
+
+    fn try_from(value: HidButtonCode) -> std::result::Result<Self, Self::Error> {
+        match value {
+            HidButtonCode::None => Err(()),
+            HidButtonCode::LButton => Ok(HidMouseButtons::LButton),
+            HidButtonCode::RButton => Ok(HidMouseButtons::RButton),
+            HidButtonCode::MButton => Ok(HidMouseButtons::MButton),
+            HidButtonCode::Button4 => Ok(HidMouseButtons::Button4),
+            HidButtonCode::Button5 => Ok(HidMouseButtons::Button5)
+        }
+    }
+}
+
+impl TryFrom<HidKeyCode> for HidModifierKeys {
+    type Error = ();
+
+    fn try_from(value: HidKeyCode) -> std::result::Result<Self, Self::Error> {
+        match value {
+            HidKeyCode::LeftCtrl   => Ok(HidModifierKeys::LCtrl),
+            HidKeyCode::LeftShift  => Ok(HidModifierKeys::LShift),
+            HidKeyCode::LeftAlt    => Ok(HidModifierKeys::LAlt),
+            HidKeyCode::LeftMeta   => Ok(HidModifierKeys::LMeta),
+            HidKeyCode::RightCtrl  => Ok(HidModifierKeys::RCtrl),
+            HidKeyCode::RightShift => Ok(HidModifierKeys::RShift),
+            HidKeyCode::RightAlt   => Ok(HidModifierKeys::RAlt),
+            HidKeyCode::RightMeta  => Ok(HidModifierKeys::RMeta),
+            _ => Err(())
+        }
+    }
 }

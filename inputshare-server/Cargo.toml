@@ -16,6 +16,7 @@ rustls = { version = "0.20", default-features = false, features = ["quic"] }
 rcgen = "0.10"
 byteorder = "1"
 bytes = "1"
+bitflags = "2"
 
 # log = "0.4"
 # env_logger = "0.10"
