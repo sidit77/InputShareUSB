@@ -1,10 +1,25 @@
 use std::{env, fs};
-use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, Result, Write};
 use std::num::NonZeroU8;
 use std::path::Path;
+use std::sync::Mutex;
+use anyhow::{Result, anyhow};
+use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncWriteExt;
+
+#[cfg(unix)]
 use std::os::unix;
-use std::sync::atomic::{AtomicU32, Ordering};
+use tokio::task::spawn_blocking;
+
+#[cfg(windows)]
+mod unix {
+    pub mod fs {
+        use std::path::Path;
+        pub fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(_: P, _: Q) -> std::io::Result<()> {
+            panic!("not supported on windows");
+        }
+    }
+
+}
 
 const KEYBOARD_REPORT_DESC: &[u8] = &[
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
@@ -109,7 +124,7 @@ const CONSUMER_REPORT_DESC: &[u8] = &[
 ];
 
 fn enable_hid() -> Result<()>{
-    tracing::info!("Enabling HID device");
+    tracing::debug!("Enabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/")?;
     fs::create_dir("g1")?;
@@ -166,9 +181,9 @@ fn enable_hid() -> Result<()>{
             .map(|e|e.file_name())
             .ok())
         .next()
-        .ok_or_else(|| Error::new(ErrorKind::Other, "No UDC found"))?
+        .ok_or_else(|| anyhow!("No UDC found"))?
         .to_str()
-        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "UDC has an invalid name"))?
+        .ok_or_else(|| anyhow!("UDC has an invalid name"))?
         .to_string();
 
     fs::write("UDC", &udc_name)?;
@@ -177,7 +192,7 @@ fn enable_hid() -> Result<()>{
 }
 
 fn disable_hid() -> Result<()>{
-    tracing::info!("Disabling HID device");
+    tracing::debug!("Disabling HID device");
 
     env::set_current_dir("/sys/kernel/config/usb_gadget/g1/")?;
 
@@ -201,27 +216,52 @@ fn disable_hid() -> Result<()>{
     Ok(())
 }
 
-static CONFIG_FS_REF_COUNT: AtomicU32 = AtomicU32::new(0);
+static CONFIG_FS_REF_COUNT: Mutex<u32> = Mutex::new(0);
 
 #[derive(Debug)]
 struct ConfigFsHandle;
 
 impl ConfigFsHandle {
+    #[allow(unreachable_code)]
     fn new() -> Result<Self> {
-        if CONFIG_FS_REF_COUNT.fetch_add(1, Ordering::SeqCst) <= 0 {
+        #[cfg(windows)]
+        panic!("Not supported on windows");
+
+        let mut guard = CONFIG_FS_REF_COUNT
+            .lock()
+            .expect("Could not acquire lock");
+        if *guard == 0 {
             enable_hid()?;
         }
+        *guard += 1;
+        assert_ne!(*guard, 0);
         Ok(Self)
     }
 }
 
 impl Drop for ConfigFsHandle {
     fn drop(&mut self) {
-        if CONFIG_FS_REF_COUNT.fetch_sub(1, Ordering::SeqCst) <= 1 {
+        let mut guard = CONFIG_FS_REF_COUNT
+            .lock()
+            .expect("Could not acquire lock");
+        assert_ne!(*guard, 0);
+        *guard -= 1;
+        if *guard == 0 {
             if let Err(err) = disable_hid() {
                 tracing::error!("Could not remove config fs configuration: {}", err);
             }
         }
+    }
+}
+
+pub async fn asyncify<F, T>(f: F) -> Result<T>
+    where
+        F: FnOnce() -> Result<T> + Send + 'static,
+        T: Send + 'static,
+{
+    match spawn_blocking(f).await {
+        Ok(res) => res,
+        Err(_) => Err(anyhow!("background task failed")),
     }
 }
 
@@ -235,9 +275,9 @@ pub struct Keyboard {
 
 impl Keyboard {
 
-    pub fn new() -> Result<Self> {
-        let _handle = ConfigFsHandle::new()?;
-        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg0")?;
+    pub async fn new() -> Result<Self> {
+        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg0").await?;
         Ok(Self {
             _handle,
             device,
@@ -246,7 +286,7 @@ impl Keyboard {
         })
     }
 
-    fn send_report(&mut self) -> Result<()> {
+    async fn send_report(&mut self) -> Result<()> {
         let mut report = [0u8; 8];
         report[0] = self.pressed_modifiers.bits();
 
@@ -254,29 +294,30 @@ impl Keyboard {
             report[2 + i] = (*key).into()
         }
         tracing::trace!("Wring keyboard report: {:?}", &report);
-        self.device.write_all(&report)
+        self.device.write_all(&report).await?;
+        Ok(())
     }
 
-    pub fn reset(&mut self) -> Result<()> {
+    pub async fn reset(&mut self) -> Result<()> {
         self.pressed_keys.clear();
         self.pressed_modifiers = HidModifierKeys::empty();
-        self.send_report()
+        self.send_report().await
     }
 
-    pub fn press_key(&mut self, key: HidKeyCode) -> Result<()> {
+    pub async fn press_key(&mut self, key: HidKeyCode) -> Result<()> {
         match key.try_into() {
             Ok(modifier) => self.pressed_modifiers.insert(modifier),
             Err(_) => self.pressed_keys.push(key)
         }
-        self.send_report()
+        self.send_report().await
     }
 
-    pub fn release_key(&mut self, key: HidKeyCode) -> Result<()> {
+    pub async fn release_key(&mut self, key: HidKeyCode) -> Result<()> {
         match key.try_into() {
             Ok(modifier) => self.pressed_modifiers.remove(modifier),
             Err(_) => self.pressed_keys.retain(|k| *k != key)
         }
-        self.send_report()
+        self.send_report().await
     }
 
 }
@@ -290,9 +331,9 @@ pub struct ConsumerDevice {
 
 impl ConsumerDevice {
 
-    pub fn new() -> Result<Self> {
-        let _handle = ConfigFsHandle::new()?;
-        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2")?;
+    pub async fn new() -> Result<Self> {
+        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2").await?;
         Ok(Self {
             _handle,
             device,
@@ -300,31 +341,32 @@ impl ConsumerDevice {
         })
     }
 
-    fn send_report(&mut self) -> Result<()> {
+    async fn send_report(&mut self) -> Result<()> {
         tracing::trace!("Wring consumer device report: {:?}", &self.pressed_keys.bits().to_le_bytes());
-        self.device.write_all(&self.pressed_keys.bits().to_le_bytes())
+        self.device.write_all(&self.pressed_keys.bits().to_le_bytes()).await?;
+        Ok(())
     }
 
-    pub fn reset(&mut self) -> Result<()> {
+    pub async fn reset(&mut self) -> Result<()> {
         self.pressed_keys = ConsumerDeviceButtons::empty();
-        self.send_report()
+        self.send_report().await
     }
 
-    pub fn press_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
+    pub async fn press_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
         match key.try_into() {
             Ok(key) => {
                 self.pressed_keys.insert(key);
-                self.send_report()
+                self.send_report().await
             },
             Err(()) => Ok(())
         }
     }
 
-    pub fn release_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
+    pub async fn release_key(&mut self, key: ConsumerDeviceCode) -> Result<()> {
         match key.try_into() {
             Ok(key) => {
                 self.pressed_keys.remove(key);
-                self.send_report()
+                self.send_report().await
             },
             Err(()) => Ok(())
         }
@@ -342,9 +384,9 @@ pub struct Mouse {
 
 impl Mouse {
 
-    pub fn new(tess_factor: NonZeroU8) -> Result<Self> {
-        let _handle = ConfigFsHandle::new()?;
-        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1")?;
+    pub async fn new(tess_factor: NonZeroU8) -> Result<Self> {
+        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1").await?;
         Ok(Self {
             _handle,
             device,
@@ -353,7 +395,7 @@ impl Mouse {
         })
     }
 
-    fn send_report(&mut self, dx: i16, dy: i16, dv: i8, dh: i8) -> Result<()> {
+    async fn send_report(&mut self, dx: i16, dy: i16, dv: i8, dh: i8) -> Result<()> {
         let mut report = [0u8; 7];
         report[0] = self.pressed_buttons.bits();
 
@@ -363,53 +405,54 @@ impl Mouse {
         report[6..=6].copy_from_slice(&dh.to_le_bytes());
 
         tracing::trace!("Wring mouse report: {:?}", &report);
-        self.device.write_all(&report)
+        self.device.write_all(&report).await?;
+        Ok(())
     }
 
-    pub fn reset(&mut self) -> Result<()> {
+    pub async fn reset(&mut self) -> Result<()> {
         self.pressed_buttons = HidMouseButtons::empty();
-        self.send_report(0,0,0,0)
+        self.send_report(0,0,0,0).await
     }
 
-    pub fn press_button(&mut self, button: HidButtonCode) -> Result<()> {
+    pub async fn press_button(&mut self, button: HidButtonCode) -> Result<()> {
         match button.try_into() {
             Ok(button) => {
                 self.pressed_buttons.insert(button);
-                self.send_report(0, 0,0,0)
+                self.send_report(0, 0,0,0).await
             },
             Err(_) => Ok(())
         }
     }
 
-    pub fn release_button(&mut self, button: HidButtonCode) -> Result<()> {
+    pub async fn release_button(&mut self, button: HidButtonCode) -> Result<()> {
         match button.try_into() {
             Ok(button) => {
                 self.pressed_buttons.remove(button);
-                self.send_report(0, 0,0,0)
+                self.send_report(0, 0,0,0).await
             },
             Err(_) => Ok(())
         }
     }
 
-    pub fn move_by(&mut self, mut dx: i16, mut dy: i16) -> Result<()> {
+    pub async fn move_by(&mut self, mut dx: i16, mut dy: i16) -> Result<()> {
         let sx = abs_max(dx / self.tess_factor, dx.signum());
         let sy = abs_max(dy / self.tess_factor, dy.signum());
         while dx != 0 || dy != 0 {
             let tx = abs_min(dx, sx);
             let ty = abs_min(dy, sy);
-            self.send_report(tx, ty, 0,0)?;
+            self.send_report(tx, ty, 0,0).await?;
             dx -= tx;
             dy -= ty;
         }
         Ok(())
     }
 
-    pub fn scroll_vertical(&mut self, amount: i8) -> Result<()> {
-        self.send_report(0, 0, amount,0)
+    pub async fn scroll_vertical(&mut self, amount: i8) -> Result<()> {
+        self.send_report(0, 0, amount,0).await
     }
 
-    pub fn scroll_horizontal(&mut self, amount: i8) -> Result<()> {
-        self.send_report(0, 0, 0, amount)
+    pub async fn scroll_horizontal(&mut self, amount: i8) -> Result<()> {
+        self.send_report(0, 0, 0, amount).await
     }
 
 }

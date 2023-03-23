@@ -1,5 +1,4 @@
 mod receiver;
-#[cfg(unix)]
 mod configfs;
 
 use anyhow::{Context, Result};
@@ -37,13 +36,14 @@ async fn main() -> Result<()> {
 
     select! {
         res = server(endpoint) => {
-            res?;
+            if let Err(err) = res {
+                tracing::error!("server crashed: {}", err);
+            }
         }
         _ = ctrl_c() => {
             tracing::debug!("Received quit signal");
         }
     };
-    tracing::trace!("End of main function");
     Ok(())
 }
 
@@ -97,29 +97,31 @@ async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     Ok(sender)
 }
 
-#[cfg(unix)]
 async fn configfs_input_processor() -> Result<UnboundedSender<InputEvent>> {
     use configfs::*;
-    let mut keyboard = Keyboard::new()?;
-    let mut mouse = Mouse::new(5.try_into()?)?;
-    let mut consumer_device = ConsumerDevice::new()?;
+    let mut keyboard = Keyboard::new().await?;
+    let mut mouse = Mouse::new(5.try_into()?).await?;
+    let mut consumer_device = ConsumerDevice::new().await?;
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     tracing::debug!("Starting configfs processor");
     tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
             let result = match event {
-                InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16),
-                InputEvent::KeyPress(key) => keyboard.press_key(key),
-                InputEvent::KeyRelease(key) => keyboard.release_key(key),
-                InputEvent::MouseButtonPress(button) => mouse.press_button(button),
-                InputEvent::MouseButtonRelease(button) => mouse.release_button(button),
-                InputEvent::ConsumerDevicePress(button) => consumer_device.press_key(button),
-                InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button),
-                InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount),
-                InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount),
-                InputEvent::Reset => keyboard.reset()
-                    .and_then(|_| mouse.reset())
-                    .and_then(|_| consumer_device.reset()),
+                InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16).await,
+                InputEvent::KeyPress(key) => keyboard.press_key(key).await,
+                InputEvent::KeyRelease(key) => keyboard.release_key(key).await,
+                InputEvent::MouseButtonPress(button) => mouse.press_button(button).await,
+                InputEvent::MouseButtonRelease(button) => mouse.release_button(button).await,
+                InputEvent::ConsumerDevicePress(button) => consumer_device.press_key(button).await,
+                InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button).await,
+                InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount).await,
+                InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount).await,
+                InputEvent::Reset => async {
+                    keyboard.reset().await?;
+                    mouse.reset().await?;
+                    consumer_device.reset().await?;
+                    Ok(())
+                }.await,
                 InputEvent::Shutdown => Ok(tracing::warn!("Shutdown is currently not supported!"))
             };
             if let Err(err) = result {
@@ -130,9 +132,4 @@ async fn configfs_input_processor() -> Result<UnboundedSender<InputEvent>> {
         tracing::debug!("Stopping configfs processor");
     });
     Ok(sender)
-}
-
-#[cfg(windows)]
-async fn configfs_input_processor() -> Result<UnboundedSender<InputEvent>> {
-    anyhow::bail!("configfs is not supported on windows")
 }
