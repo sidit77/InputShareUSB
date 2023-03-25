@@ -6,23 +6,22 @@ mod conversions;
 mod popup;
 mod sender;
 
+use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
 use druid::widget::{Button, Flex, Label, SizedBox};
-use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
+use druid::{AppDelegate, AppLauncher, Command, Data, DelegateCtx, Env, EventCtx, ExtEventSink, Handled, Selector, Target, Widget, WidgetExt, WindowDesc};
 use druid::im::HashSet;
-use error_tools::log::LogResultExt;
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::runtime::{Builder, Runtime};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
+use yawi::{HookAction, InputEvent, InputHook, KeyState, ScrollDirection, VirtualKey};
 use serde::{Serialize, Deserialize};
 use tokio::{select};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::time::{Instant};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::hook::HookEvent;
@@ -127,16 +126,15 @@ fn make_ui() -> impl Widget<AppState> {
         }.to_string())
             .with_text_size(17.0))
             .fix_size(250.0, 65.0)
-            .on_click(|ctx, _, _| ctx.submit_command(MSG.with(())))
+            .on_click(|ctx, _, _| ctx.submit_command(CONNECT.with(())))
             .disabled_if(|data: &AppState, _ | data.connection_state == ConnectionState::Connecting))
         .with_default_spacer()
-        .with_child(Button::new("popup")
+        .with_child(Button::dynamic(|data: &AppState, _|data.config.hotkey.trigger.to_string())
             .fix_width(250.0)
-            .on_click(|_, data: &mut AppState, _ | data.popup = true))
+            .on_click(|ctx, _, _ |  open_key_picker(ctx,  |data, key| data.config.hotkey.trigger = key)))
         .center();
     let popup = Flex::column()
-        .with_child(Label::new("Hello"))
-        .with_child(Button::new("Back").on_click(|_, data: &mut AppState, _| data.popup = false))
+        .with_child(Label::new("Press any key"))
         .center();
     let popup = SizedBox::new(popup)
         .width(200.0)
@@ -146,9 +144,58 @@ fn make_ui() -> impl Widget<AppState> {
     Popup::new(|data: &AppState, _| data.popup, popup, ui)
 }
 
-pub const MSG: Selector<()> = Selector::new("inputshare.msg");
-pub const INSTALL_HOOK: Selector<UnboundedSender<HookEvent>> = Selector::new("inputshare.install_hook");
-pub const RESET: Selector<()> = Selector::new("inputshare.reset");
+fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, VirtualKey) + Send + 'static) {
+    let handle = ctx.get_external_handle();
+    ctx.add_rt_callback(move |rt, data| {
+        if data.connection_state != ConnectionState::Disconnected {
+            return;
+        }
+        assert!(rt.hook.is_none());
+        let mut found = None;
+        let setter = Cell::new(Some(setter));
+        rt.hook = InputHook::register(move |event: InputEvent| {
+            match  event.to_key_event() {
+                Some(yawi::KeyEvent{key, state: KeyState::Pressed}) if found.is_none() || found == Some(key) => {
+                    found = Some(key);
+                    HookAction::Block
+                },
+                Some(yawi::KeyEvent{key, state: KeyState::Released}) if found == Some(key) => {
+                    if let Some(setter) = setter.take() {
+                        handle.add_rt_callback(move |rt, data| {
+                            rt.hook = None;
+                            setter(data, key);
+                            data.popup = false;
+                        });
+                    }
+                    HookAction::Block
+                },
+                _ => HookAction::Continue,
+            }
+        }).map_err(|err| tracing::warn!("Could not register hook: {}", err)).ok();
+        data.popup = true;
+    })
+}
+
+pub const CONNECT: Selector<()> = Selector::new("inputshare.connect");
+type CallbackFunc = Cell<Option<Box<dyn FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static>>>;
+const CALLBACK: Selector<CallbackFunc> = Selector::new("inputshare.callback");
+trait ExtEventSinkCallback {
+    fn add_rt_callback(self, callback: impl FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static);
+}
+impl ExtEventSinkCallback for &ExtEventSink {
+    fn add_rt_callback(self, callback: impl FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static) {
+        let callback: CallbackFunc = Cell::new(Some(Box::new(callback)));
+        self.submit_command(CALLBACK, Box::new(callback), Target::Auto)
+            .unwrap_or_else(|err| tracing::warn!("Could not submit callback: {}", err));
+    }
+}
+
+impl ExtEventSinkCallback for &mut EventCtx<'_, '_> {
+    fn add_rt_callback(self, callback: impl FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static) {
+        let callback: CallbackFunc = Cell::new(Some(Box::new(callback)));
+        self.submit_command(CALLBACK.with(callback));
+    }
+}
 
 struct RuntimeDelegate {
     hook: Option<InputHook>,
@@ -173,7 +220,7 @@ impl RuntimeDelegate {
 impl AppDelegate<AppState> for RuntimeDelegate {
     fn command(&mut self, ctx: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
         match cmd {
-            cmd if cmd.is(MSG) => {
+            cmd if cmd.is(CONNECT) => {
                 self.hook = None;
                 if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected{
                     let handle = ctx.get_external_handle();
@@ -181,22 +228,19 @@ impl AppDelegate<AppState> for RuntimeDelegate {
                     self.runtime.spawn(async move {
                         connection(&handle)
                             .await
-                            .log_ok("Connection error");
-                        handle.submit_command(RESET, Box::new(()),Target::Auto)
-                            .log_ok("Can not submit reset command");
+                            .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
+                        handle.add_rt_callback(|rt, data | {
+                            rt.hook = None;
+                            data.connection_state = ConnectionState::Disconnected;
+                        });
                     });
                 }
                 Handled::Yes
             },
-            cmd if cmd.is(RESET) => {
-                self.hook = None;
-                data.connection_state = ConnectionState::Disconnected;
-                Handled::Yes
-            },
-            cmd if cmd.is(INSTALL_HOOK) => {
-                let sender = cmd.get_unchecked(INSTALL_HOOK).clone();
-                self.hook = InputHook::register(hook::create_callback(&data.config, sender))
-                                             .log_ok("Failed to register hook");
+            cmd if cmd.is(CALLBACK) => {
+                if let Some(callback) = cmd.get_unchecked(CALLBACK).take() {
+                    callback(self, data);
+                }
                 Handled::Yes
             }
             _ => Handled::No
@@ -207,22 +251,13 @@ impl AppDelegate<AppState> for RuntimeDelegate {
 async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     let connection = connect().await?;
     tracing::debug!("Connected to {}", connection.remote_address());
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    sink.submit_command(INSTALL_HOOK, Box::new(sender), Target::Auto)
-        .log_ok("failed to install hook");
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    sink.add_rt_callback(|rt, data| {
+        rt.hook = InputHook::register(hook::create_callback(&data.config, sender))
+            .map_err(|err| tracing::warn!("Failed to register hook: {}", err))
+            .ok();
+    });
 
-    handle_input(receiver, connection.clone(), sink).await?;
-        //.or(connection
-        //    .closed()
-        //    .map(|e|Err(e.into())))
-        //.await?;
-
-    tracing::trace!("Shutting down key handler");
-
-    Ok(())
-}
-
-async fn handle_input(mut receiver: UnboundedReceiver<HookEvent>, connection: Connection, sink: &ExtEventSink) -> anyhow::Result<()> {
     let mut sender = InputSender::new(1.0);
     let mut deadline = None;
     loop {
@@ -253,6 +288,8 @@ async fn handle_input(mut receiver: UnboundedReceiver<HookEvent>, connection: Co
             false => Some(deadline.unwrap_or_else(Instant::now))
         };
     }
+
+    tracing::trace!("Shutting down key handler");
 
     Ok(())
 }
@@ -318,43 +355,6 @@ async fn connect() -> anyhow::Result<Connection> {
     let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
     Ok(connection)
 }
-/*
-async fn key_handler(mut receiver: UnboundedReceiver<HookEvent>, sink: ExtEventSink) {
-    while let Some(event) = receiver.recv().await {
-        match event {
-            HookEvent::Captured(captured) => sink.add_idle_callback(move |data: &mut AppState| {
-                data.connection_state = ConnectionState::Connected(match captured {
-                    true => Side::Remote,
-                    false => Side::Local
-                });
-            }),
-            HookEvent::Input(event) => match event {
-                InputEvent::MouseMoveEvent(_x, _y) => {
-
-                }
-                InputEvent::KeyboardKeyEvent(vk, sc, ks) => match wsc_to_hkc(sc) {
-                    Some(kc) => tracing::info!("Key {:?} {:?}", kc, ks),
-                    None => match wsc_to_cdc(sc){
-                        Some(cdc) => tracing::info!("Consumer {:?} {:?}", cdc, ks),
-                        None => if! matches!(sc, 0x21d) {
-                            tracing::warn!("Unknown key: {} ({:x})", vk, sc)
-                        }
-                    }
-                }
-                InputEvent::MouseButtonEvent(mb, ks) => match vk_to_mb(mb) {
-                    Some(button) => tracing::info!("Mouse {:?} {:?}", button, ks),
-                    None => tracing::warn!("Unknown mouse button: {}", mb)
-                }
-                InputEvent::MouseWheelEvent(sd) => match sd {
-                    ScrollDirection::Horizontal(amount) => tracing::info!("HScroll {:?}", f32_to_i8(amount)),
-                    ScrollDirection::Vertical(amount) => tracing::info!("VScroll {:?}", f32_to_i8(amount))
-                }
-            }
-        }
-    }
-    tracing::trace!("Shutting down key handler");
-}
-*/
 
 struct SkipServerVerification;
 

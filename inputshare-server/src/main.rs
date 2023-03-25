@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 }
 
 async fn server(endpoint: Endpoint) -> Result<()> {
-    let processor = configfs_input_processor().await?;
+    let processor = log_input_processor().await?;
     while let Some(conn) = endpoint.accept().await {
         let processor = processor.clone();
         tokio::spawn(async move {
@@ -85,6 +85,7 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
     }
 }
 
+#[allow(dead_code)]
 async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     tracing::debug!("Starting print processor");
@@ -97,6 +98,7 @@ async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     Ok(sender)
 }
 
+#[allow(dead_code)]
 async fn configfs_input_processor() -> Result<UnboundedSender<InputEvent>> {
     use configfs::*;
     let mut keyboard = Keyboard::new().await?;
