@@ -1,8 +1,8 @@
 use error_tools::log::LogResultExt;
 use tokio::sync::mpsc::UnboundedSender;
 use yawi::{HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, send_inputs, VirtualKey};
-use crate::Config;
-use crate::hook::util::VirtualKeySet;
+use crate::model::Config;
+use crate::utils::hook::util::VirtualKeySet;
 
 #[derive(Debug, Copy, Clone)]
 pub enum HookEvent {

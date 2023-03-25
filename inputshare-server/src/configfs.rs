@@ -186,7 +186,7 @@ fn enable_hid() -> Result<()>{
         .ok_or_else(|| anyhow!("UDC has an invalid name"))?
         .to_string();
 
-    fs::write("UDC", &udc_name)?;
+    fs::write("UDC", udc_name)?;
 
     Ok(())
 }
@@ -276,7 +276,7 @@ pub struct Keyboard {
 impl Keyboard {
 
     pub async fn new() -> Result<Self> {
-        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let _handle = asyncify(ConfigFsHandle::new).await?;
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg0").await?;
         Ok(Self {
             _handle,
@@ -332,7 +332,7 @@ pub struct ConsumerDevice {
 impl ConsumerDevice {
 
     pub async fn new() -> Result<Self> {
-        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let _handle = asyncify(ConfigFsHandle::new).await?;
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg2").await?;
         Ok(Self {
             _handle,
@@ -385,7 +385,7 @@ pub struct Mouse {
 impl Mouse {
 
     pub async fn new(tess_factor: NonZeroU8) -> Result<Self> {
-        let _handle = asyncify(|| ConfigFsHandle::new()).await?;
+        let _handle = asyncify(ConfigFsHandle::new).await?;
         let device = OpenOptions::new().write(true).append(true).open("/dev/hidg1").await?;
         Ok(Self {
             _handle,
