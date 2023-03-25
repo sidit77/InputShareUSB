@@ -371,15 +371,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "error-tools"
-version = "0.1.0"
-source = "git+https://github.com/sidit77/error-tools.git#cfd791847712d77b1350a15066ca5a682b654a1f"
-dependencies = [
- "log",
- "windows-sys 0.45.0",
-]
-
-[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -807,9 +798,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "druid",
- "error-tools",
  "futures-lite",
- "futures-util",
  "inputshare-common",
  "quinn",
  "rustls",

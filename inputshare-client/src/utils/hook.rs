@@ -1,4 +1,3 @@
-use error_tools::log::LogResultExt;
 use tokio::sync::mpsc::UnboundedSender;
 use yawi::{HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, send_inputs, VirtualKey};
 use crate::model::Config;
@@ -13,7 +12,7 @@ pub enum HookEvent {
 pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> HookFn {
     let send = move |event| sender
         .send(event)
-        .log_ok("Could not send event");
+        .unwrap_or_else(|err| tracing::warn!("Could not send event: {}", err));
 
     let mut old_mouse_pos = yawi::get_cursor_pos();
 
@@ -101,7 +100,7 @@ fn try_release_all(keys: VirtualKeySet, trigger: VirtualKey) {
             true => Input::MouseButtonInput(k, KeyState::Released),
             false => Input::KeyboardKeyInput(k, KeyState::Released),
         }))
-        .log_ok("Could not send input events");
+        .unwrap_or_else(|err| tracing::warn!("Could not send input events: {}", err));
 }
 
 mod util {

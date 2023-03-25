@@ -11,12 +11,12 @@ build = "build.rs"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 anyhow = { version = "1", features = ["backtrace"] }
-error-tools = { git = "https://github.com/sidit77/error-tools.git", features = ["log", "gui"] }
+# error-tools = { git = "https://github.com/sidit77/error-tools.git", features = ["log", "gui"] }
 
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
 futures-lite = "1"
-futures-util = "0.3"
+# futures-util = "0.3"
 quinn = "0.9"
 rustls = { version = "0.20", default-features = false, features = ["quic", "dangerous_configuration"] }
 
