@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
 use druid::widget::{Button, Flex, Label, List, SizedBox, TextBox};
-use druid::{AppLauncher, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
+use druid::{AppLauncher, Color, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -91,8 +91,11 @@ fn make_ui() -> impl Widget<AppState> {
 }
 
 fn main_ui() -> impl Widget<AppState> + 'static {
+    let config = config_ui()
+        .lens(AppState::config)
+        .disabled_if(|data, _|data.connection_state != ConnectionState::Disconnected);
     Flex::column()
-        .with_flex_child(config_ui().lens(AppState::config), 1.0)
+        .with_flex_child(config, 1.0)
         .with_spacer(5.0)
         .with_child(status_ui())
         .padding(5.0)
@@ -127,10 +130,20 @@ fn host_ui() -> impl Widget<String> + 'static {
 }
 
 fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
-    let modifiers = keyset_ui()
-        .lens(Hotkey::modifiers);
+    let modifiers = keyset_ui(|data, key| {
+        let hotkey = &mut data.config.hotkey;
+        match key != hotkey.trigger {
+            true => hotkey.modifiers.insert(key),
+            false => tracing::warn!("The trigger can not be a modifier")
+        }
+    }).lens(Hotkey::modifiers);
     let trigger = Button::dynamic(|data: &VirtualKey, _| data.to_string())
         .expand_width()
+        .on_click(|ctx, _, _| open_key_picker(ctx, |data, key| {
+            let hotkey = &mut data.config.hotkey;
+            hotkey.modifiers.remove(key);
+            hotkey.trigger = key;
+        }))
         .lens(Hotkey::trigger);
     Flex::column()
         .with_child(Label::new("Hotkey")
@@ -148,27 +161,38 @@ fn status_ui() -> impl Widget<AppState> + 'static {
         .expand();
     let button = Button::new("Connect")
         .fix_width(100.0)
+        .on_click(|_, data: &mut AppState, _| data.connection_state = match data.connection_state {
+            ConnectionState::Connected(_) => ConnectionState::Disconnected,
+            ConnectionState::Connecting => ConnectionState::Disconnected,
+            ConnectionState::Disconnected => ConnectionState::Connecting
+        })
         .expand_height();
     Flex::row()
         .with_flex_child(status, 1.0)
         .with_spacer(5.0)
         .with_child(button)
-        .fix_height(35.0)
+        .fix_height(50.0)
 }
 
 fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
     Flex::column()
         .with_child(Label::new("Blacklist")
             .expand_width())
-        .with_flex_child(keyset_ui(), 1.0)
+        .with_flex_child(keyset_ui(|data, key| data.config.blacklist.insert(key)), 1.0)
 }
 
-fn keyset_ui() -> impl Widget<VirtualKeySet> + 'static {
+fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet> + 'static {
     let list = List::new(key_ui)
         .with_spacing(2.0)
-        .padding(2.0);
+        .padding((2.0, 2.0, 2.0, 0.0));
     let add = Button::new("Add new")
-        .fix_height(23.0)
+        .env_scope(|env, _| {
+            env.set(druid::theme::BUTTON_DARK, Color::TRANSPARENT);
+            env.set(druid::theme::BUTTON_LIGHT, Color::TRANSPARENT);
+            env.set(druid::theme::DISABLED_BUTTON_DARK, Color::TRANSPARENT);
+            env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
+        })
+        .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
         .padding(2.0)
         .expand_width();
     druid::widget::Scroll::new(
@@ -181,15 +205,10 @@ fn keyset_ui() -> impl Widget<VirtualKeySet> + 'static {
         .rounded(2.0)
 }
 
-fn key_ui() -> impl Widget<VirtualKey> + 'static {
-    Label::dynamic(|key: &VirtualKey, _| key.to_string())
-        .center()
-        .padding(2.0)
-        .background(druid::theme::BACKGROUND_LIGHT)
-        .border(druid::theme::BORDER_DARK, 1.0)
-        .rounded(3.0)
+fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
+    Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
+        .on_click(|_, (set, key), _| set.remove(*key))
         .expand_width()
-        .on_click(|_, _, _| println!("remove"))
 }
 
 fn initiate_connection(ctx: &mut EventCtx) {

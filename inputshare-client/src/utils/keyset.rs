@@ -113,3 +113,27 @@ impl ListIter<VirtualKey> for VirtualKeySet {
         self.len()
     }
 }
+
+impl ListIter<(VirtualKeySet, VirtualKey)> for VirtualKeySet {
+    fn for_each(&self, mut cb: impl FnMut(&(VirtualKeySet, VirtualKey), usize)) {
+        for (i, item) in self.iter().enumerate() {
+            cb(&(*self, item), i);
+        }
+    }
+
+    fn for_each_mut(&mut self, mut cb: impl FnMut(&mut (VirtualKeySet, VirtualKey), usize)) {
+        let mut updated = *self;
+        for (i, mut item) in self.iter().enumerate() {
+            let mut tuple = (updated, item);
+            cb(&mut tuple, i);
+            updated = tuple.0;
+            //updated.remove(item);
+            //updated.insert(tuple.1);
+        }
+        *self = updated;
+    }
+
+    fn data_len(&self) -> usize {
+        self.len()
+    }
+}
