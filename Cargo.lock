@@ -326,6 +326,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "druid-material-icons"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4bec6bb18de60e94ae40759466e034aa284bc36a506e4a556cb8654e4a88f9"
+dependencies = [
+ "druid",
+ "kurbo",
+]
+
+[[package]]
 name = "druid-shell"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -798,6 +808,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "druid",
+ "druid-material-icons",
  "futures-lite",
  "inputshare-common",
  "quinn",

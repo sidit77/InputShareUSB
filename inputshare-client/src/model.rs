@@ -18,14 +18,19 @@ impl Hotkey {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
 pub struct Config {
+    pub host_address: String,
     pub hotkey: Hotkey,
     pub blacklist: VirtualKeySet,
+    pub show_network_info: bool,
+    pub network_send_rate: u32,
+    pub mouse_speed_factor: f32
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            hotkey: Hotkey::new(None, VirtualKey::Apps),
+            host_address: "localhost:12345".to_string(),
+            hotkey: Hotkey::new([VirtualKey::LControl], VirtualKey::Tab),
             blacklist: VirtualKeySet::from_iter([
                 VirtualKey::VolumeDown,
                 VirtualKey::VolumeUp,
@@ -35,6 +40,9 @@ impl Default for Config {
                 VirtualKey::MediaPlayPause,
                 VirtualKey::MediaNextTrack
             ]),
+            show_network_info: false,
+            network_send_rate: 100,
+            mouse_speed_factor: 1.0,
         }
     }
 }
