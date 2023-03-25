@@ -9,14 +9,14 @@ mod model;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{Button, Flex, Label, SizedBox};
-use druid::{AppLauncher, EventCtx, ExtEventSink, Widget, WidgetExt, WindowDesc};
+use druid::widget::{Button, Flex, Label, List, SizedBox};
+use druid::{AppLauncher, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputHook};
+use yawi::{InputHook, VirtualKey};
 use tokio::select;
 use tokio::time::Instant;
 use crate::model::{AppState, ConnectionState, Side};
@@ -26,6 +26,7 @@ use crate::ui::popup::Popup;
 use crate::ui::{open_key_picker, theme};
 use crate::ui::theme::Theme;
 use crate::utils::{hook, process_hook_event, SkipServerVerification};
+use crate::utils::keyset::VirtualKeySet;
 
 pub fn main() {
     tracing_subscriber::registry()
@@ -53,6 +54,7 @@ pub fn main() {
 
 fn make_ui() -> impl Widget<AppState> {
     let ui = Flex::column()
+        .with_child(blacklist_ui().lens(lens!(AppState, config.blacklist)))
         .with_child(Label::dynamic(|data: &AppState, _| match data.connection_state {
             ConnectionState::Connected(Side::Local) => "Local",
             ConnectionState::Connected(Side::Remote) => "Remote",
@@ -84,6 +86,25 @@ fn make_ui() -> impl Widget<AppState> {
         .background(druid::theme::BACKGROUND_DARK)
         .rounded(5.0);
     Popup::new(|data: &AppState, _| data.popup, popup, ui)
+}
+
+fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
+    let list = List::new(key_ui)
+        .with_spacing(4.0)
+        .padding(3.0);
+    druid::widget::Scroll::new(list)
+        .vertical()
+        .border(druid::theme::BORDER_DARK, 2.0)
+        .rounded(2.0)
+        .padding(3.0)
+        .fix_height(100.0)
+
+}
+
+fn key_ui() -> impl Widget<VirtualKey> + 'static {
+    Label::dynamic(|key: &VirtualKey, _| key.to_string())
+        .border(druid::theme::BORDER_DARK, 2.0)
+        .rounded(2.0)
 }
 
 fn initiate_connection(ctx: &mut EventCtx) {

@@ -8,6 +8,7 @@ use crate::utils::hook::HookEvent;
 
 pub mod conversions;
 pub mod hook;
+pub mod keyset;
 
 pub fn process_hook_event(sender: &mut InputSender, sink: &ExtEventSink, event: HookEvent) {
     match event {

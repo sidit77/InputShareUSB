@@ -1,32 +1,32 @@
 use serde::{Serialize, Deserialize};
-use druid::{Data};
-use druid::im::HashSet;
+use druid::{Data, Lens};
 use yawi::VirtualKey;
+use crate::utils::keyset::VirtualKeySet;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Data)]
+#[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
 pub struct Hotkey {
-    pub modifiers: HashSet<VirtualKey>,
+    pub modifiers: VirtualKeySet,
     pub trigger: VirtualKey
 }
 
 impl Hotkey {
     pub fn new<T: IntoIterator<Item = VirtualKey>>(modifiers: T, trigger: VirtualKey) -> Self {
-        Self { modifiers: HashSet::from_iter(modifiers), trigger}
+        Self { modifiers: VirtualKeySet::from_iter(modifiers), trigger}
     }
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize, Data)]
+#[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
 pub struct Config {
     pub hotkey: Hotkey,
-    pub blacklist: HashSet<VirtualKey>,
+    pub blacklist: VirtualKeySet,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             hotkey: Hotkey::new(None, VirtualKey::Apps),
-            blacklist: HashSet::from([
+            blacklist: VirtualKeySet::from_iter([
                 VirtualKey::VolumeDown,
                 VirtualKey::VolumeUp,
                 VirtualKey::VolumeMute,
@@ -34,7 +34,7 @@ impl Default for Config {
                 VirtualKey::MediaPrevTrack,
                 VirtualKey::MediaPlayPause,
                 VirtualKey::MediaNextTrack
-            ].as_slice()),
+            ]),
         }
     }
 }
@@ -52,7 +52,7 @@ pub enum ConnectionState {
     Disconnected
 }
 
-#[derive(Default, Debug, Clone, Data)]
+#[derive(Default, Debug, Clone, Data, Lens)]
 pub struct AppState {
     pub config: Config,
     pub connection_state: ConnectionState,

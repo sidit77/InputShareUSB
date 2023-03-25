@@ -22,7 +22,7 @@ rustls = { version = "0.20", default-features = false, features = ["quic", "dang
 
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"
-druid = { version = "0.8", features = ["im", "serde"] }
+druid = { version = "0.8", features = ["serde"] }
 
 inputshare-common = { path = "../lib/inputshare-common" }
 yawi = {path = "../lib/yawi", features = ["serde", "druid"]}
