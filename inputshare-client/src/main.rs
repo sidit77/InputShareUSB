@@ -3,8 +3,8 @@
 mod theme;
 mod hook;
 mod conversions;
-mod popup;
 mod sender;
+mod ui;
 
 use std::cell::Cell;
 use std::sync::Arc;
@@ -25,9 +25,9 @@ use tokio::{select};
 use tokio::time::{Instant};
 use crate::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::hook::HookEvent;
-use crate::popup::{Popup};
 use crate::sender::InputSender;
 use crate::theme::Theme;
+use crate::ui::popup::Popup;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data)]
 pub struct Hotkey {

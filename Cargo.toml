@@ -3,9 +3,7 @@ members = [
     "inputshare-client",
     "inputshare-server",
     "lib/inputshare-common",
-    "lib/winsock2_extensions",
     "lib/yawi",
-    "lib/egui-d3d11"
 ]
 
 [profile.release]
