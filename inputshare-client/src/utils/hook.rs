@@ -16,8 +16,8 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
 
     let mut old_mouse_pos = yawi::get_cursor_pos();
 
-    let blacklist = config.blacklist.clone();
-    let modifiers = config.hotkey.modifiers.clone();
+    let blacklist = config.blacklist;
+    let modifiers = config.hotkey.modifiers;
     let trigger = config.hotkey.trigger;
 
     let mut captured = false;

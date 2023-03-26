@@ -10,6 +10,7 @@ use tracing::{instrument, trace};
 pub struct WrappingList<T> {
     closure: Box<dyn Fn() -> Box<dyn Widget<T>>>,
     children: Vec<WidgetPod<T, Box<dyn Widget<T>>>>,
+    end: Option<WidgetPod<(), Box<dyn Widget<()>>>>,
     axis: Axis,
     spacing: KeyOrValue<f64>,
     old_bc: BoxConstraints,
@@ -22,6 +23,7 @@ impl<T: Data> WrappingList<T> {
         WrappingList {
             closure: Box::new(move || Box::new(closure())),
             children: Vec::new(),
+            end: None,
             axis: Axis::Vertical,
             spacing: KeyOrValue::Concrete(0.),
             old_bc: BoxConstraints::tight(Size::ZERO),
@@ -34,6 +36,17 @@ impl<T: Data> WrappingList<T> {
         self
     }
 
+    pub fn with_end(mut self, child: impl Widget<()> + 'static) -> Self {
+        self.end = Some(WidgetPod::new(Box::new(child)));
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn set_end(&mut self, child: impl Widget<()> + 'static) -> &mut Self {
+        self.end = Some(WidgetPod::new(Box::new(child)));
+        self
+    }
+
     /// Set the spacing between elements.
     pub fn with_spacing(mut self, spacing: impl Into<KeyOrValue<f64>>) -> Self {
         self.spacing = spacing.into();
@@ -41,6 +54,7 @@ impl<T: Data> WrappingList<T> {
     }
 
     /// Set the spacing between elements.
+    #[allow(dead_code)]
     pub fn set_spacing(&mut self, spacing: impl Into<KeyOrValue<f64>>) -> &mut Self {
         self.spacing = spacing.into();
         self
@@ -75,6 +89,9 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
                 child.event(ctx, event, child_data, env);
             }
         });
+        if let Some(end) = &mut self.end {
+            end.event(ctx, event, &mut (), env);
+        }
     }
 
     #[instrument(name = "WrappingList", level = "trace", skip(self, ctx, event, data, env))]
@@ -91,6 +108,10 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
                 child.lifecycle(ctx, event, child_data, env);
             }
         });
+
+        if let Some(end) = &mut self.end {
+            end.lifecycle(ctx, event, &(), env);
+        }
     }
 
     #[instrument(name = "WrappingList", level = "trace", skip(self, ctx, _old_data, data, env))]
@@ -104,6 +125,9 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
                 child.update(ctx, child_data, env);
             }
         });
+        if let Some(end) = &mut self.end {
+            end.update(ctx, &(), env);
+        }
 
         if self.update_child_count(data, env) {
             ctx.children_changed();
@@ -162,6 +186,26 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
 
         });
 
+        if let Some(end) = &mut self.end {
+            let child_size = if bc_changed || end.layout_requested() {
+                end.layout(ctx, &child_bc, &mut (), env)
+            } else {
+                end.layout_rect().size()
+            };
+
+            if major_pos + axis.major(child_size) >= major_max {
+                minor_offset += minor + spacing;
+                minor = 0.0;
+                major_pos = 0.0;
+            }
+
+            let child_pos: Point = axis.pack(major_pos, minor_offset).into();
+            end.set_origin(ctx, child_pos);
+            paint_rect = paint_rect.union(end.paint_rect());
+            minor = minor.max(axis.minor(child_size));
+            major_pos += axis.major(child_size);
+            major = major.max(major_pos);
+        }
 
         let my_size = bc.constrain(Size::from(axis.pack(major, minor + minor_offset)));
         let insets = paint_rect - my_size.to_rect();
@@ -178,6 +222,9 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
                 child.paint(ctx, child_data, env);
             }
         });
+        if let Some(end) = &mut self.end {
+            end.paint(ctx, &(), env);
+        }
     }
 
     fn debug_state(&self, data: &T) -> DebugState {

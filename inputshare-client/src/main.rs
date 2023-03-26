@@ -9,7 +9,7 @@ mod model;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{Button, Flex, Label, List, Scroll, SizedBox, TextBox};
+use druid::widget::{Button, CrossAxisAlignment, Flex, Label, List, Scroll, SizedBox, TextBox};
 use druid::{AppLauncher, Color, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -30,6 +30,7 @@ use crate::ui::theme::Theme;
 use crate::utils::{hook, process_hook_event, SkipServerVerification};
 use crate::utils::keyset::VirtualKeySet;
 use druid_material_icons::normal::hardware::CAST;
+use druid_material_icons::normal::content::ADD;
 use crate::ui::list::WrappingList;
 
 pub fn main() {
@@ -37,7 +38,8 @@ pub fn main() {
         .with(Targets::new()
             .with_default(LevelFilter::DEBUG)
             .with_target("yawi", LevelFilter::TRACE)
-            .with_target("inputshare_client", LevelFilter::TRACE))
+            .with_target("inputshare_client", LevelFilter::TRACE)
+            .with_target("inputshare_client::ui::list", LevelFilter::DEBUG))
         .with(layer()
             .without_time())
         .init();
@@ -109,14 +111,15 @@ fn config_ui() -> impl Widget<Config> + 'static {
         .lens(Config::blacklist);
     let hotkey = hotkey_ui()
         .lens(Config::hotkey);
-    let keys = Flex::column()
-        .with_flex_child(hotkey, 1.0)
-        .with_spacer(5.0)
-        .with_flex_child(blacklist, 1.0);
     Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Start)
         .with_child(host)
         .with_default_spacer()
-        .with_flex_child(keys, 1.0)
+        .with_child(Label::new("Hotkey"))
+        .with_child(hotkey)
+        .with_default_spacer()
+        .with_child(Label::new("Blacklist"))
+        .with_flex_child(blacklist, 1.0)
 }
 
 fn host_ui() -> impl Widget<String> + 'static {
@@ -131,13 +134,21 @@ fn host_ui() -> impl Widget<String> + 'static {
 }
 
 fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
-    let modifiers = keyset_ui(|data, key| {
+    let add = add_button(|data, key| {
         let hotkey = &mut data.config.hotkey;
         match key != hotkey.trigger {
             true => hotkey.modifiers.insert(key),
             false => tracing::warn!("The trigger can not be a modifier")
         }
-    }).lens(Hotkey::modifiers);
+    });
+    let list = WrappingList::new(key_ui)
+        .with_end(add)
+        .horizontal()
+        .with_spacing(2.0)
+        .padding(2.0);
+    let modifiers = Scroll::new(list)
+        .horizontal()
+        .lens(Hotkey::modifiers);
     let trigger = Button::dynamic(|data: &VirtualKey, _| data.to_string())
         .on_click(|ctx, _, _| open_key_picker(ctx, |data, key| {
             let hotkey = &mut data.config.hotkey;
@@ -146,9 +157,41 @@ fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
         }))
         .lens(Hotkey::trigger);
     Flex::row()
-        .with_flex_child(modifiers, 1.0)
-        .with_child(Label::new("+"))
+        .with_child(modifiers)
+        .with_child(Icon::from(ADD))
         .with_child(trigger)
+        .with_spacer(2.0)
+        .border(druid::theme::BORDER_DARK, 2.0)
+        .rounded(2.0)
+}
+
+fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
+    let add = add_button(|data, key| data.config.blacklist.insert(key));
+    let list = WrappingList::new(key_ui)
+        .with_end(add)
+        .horizontal()
+        .with_spacing(2.0)
+        .padding(2.0);
+    Scroll::new(list)
+        .vertical()
+        .border(druid::theme::BORDER_DARK, 2.0)
+        .rounded(2.0)
+}
+
+fn add_button(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<()> + 'static {
+    Button::new("+")
+        .env_scope(|env, _| {
+            env.set(druid::theme::BUTTON_DARK, Color::TRANSPARENT);
+            env.set(druid::theme::BUTTON_LIGHT, Color::TRANSPARENT);
+            env.set(druid::theme::DISABLED_BUTTON_DARK, Color::TRANSPARENT);
+            env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
+        })
+        .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
+}
+
+fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
+    Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
+        .on_click(|_, (set, key), _| set.remove(*key))
 }
 
 fn status_ui() -> impl Widget<AppState> + 'static {
@@ -172,46 +215,7 @@ fn status_ui() -> impl Widget<AppState> + 'static {
         .fix_height(50.0)
 }
 
-fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
-    Flex::column()
-        .with_child(Label::new("Blacklist")
-            .expand_width())
-        .with_flex_child(keyset_ui(|data, key| data.config.blacklist.insert(key)), 1.0)
-}
 
-fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet> + 'static {
-    let list = WrappingList::new(key_ui)
-        .horizontal()
-        .with_spacing(2.0)
-        .padding((2.0, 2.0, 2.0, 2.0));
-    //let add = Button::new("Add new")
-    //    .env_scope(|env, _| {
-    //        env.set(druid::theme::BUTTON_DARK, Color::TRANSPARENT);
-    //        env.set(druid::theme::BUTTON_LIGHT, Color::TRANSPARENT);
-    //        env.set(druid::theme::DISABLED_BUTTON_DARK, Color::TRANSPARENT);
-    //        env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
-    //    })
-    //    .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
-    //    .padding(2.0);
-    //druid::widget::Scroll::new(
-    //    Flex::row()
-    //        .with_child(list)
-    //        .with_child(add))
-    //    .vertical()
-    //    .expand()
-    //    .border(druid::theme::BORDER_DARK, 2.0)
-    //    .rounded(2.0)
-    Scroll::new(list)
-        .vertical()
-        //.expand()
-        .border(druid::theme::BORDER_DARK, 2.0)
-        .rounded(2.0)
-}
-
-fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
-    Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
-        .on_click(|_, (set, key), _| set.remove(*key))
-}
 
 fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
