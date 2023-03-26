@@ -9,7 +9,7 @@ mod model;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{Button, Flex, Label, List, SizedBox, TextBox};
+use druid::widget::{Button, Flex, Label, List, Scroll, SizedBox, TextBox};
 use druid::{AppLauncher, Color, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -30,6 +30,7 @@ use crate::ui::theme::Theme;
 use crate::utils::{hook, process_hook_event, SkipServerVerification};
 use crate::utils::keyset::VirtualKeySet;
 use druid_material_icons::normal::hardware::CAST;
+use crate::ui::list::WrappingList;
 
 pub fn main() {
     tracing_subscriber::registry()
@@ -179,25 +180,30 @@ fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
 }
 
 fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet> + 'static {
-    let list = List::new(key_ui)
+    let list = WrappingList::new(key_ui)
         .horizontal()
         .with_spacing(2.0)
-        .padding((2.0, 2.0, 2.0, 0.0));
-    let add = Button::new("Add new")
-        .env_scope(|env, _| {
-            env.set(druid::theme::BUTTON_DARK, Color::TRANSPARENT);
-            env.set(druid::theme::BUTTON_LIGHT, Color::TRANSPARENT);
-            env.set(druid::theme::DISABLED_BUTTON_DARK, Color::TRANSPARENT);
-            env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
-        })
-        .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
-        .padding(2.0);
-    druid::widget::Scroll::new(
-        Flex::row()
-            .with_child(list)
-            .with_child(add))
-        .horizontal()
-        .expand()
+        .padding((2.0, 2.0, 2.0, 2.0));
+    //let add = Button::new("Add new")
+    //    .env_scope(|env, _| {
+    //        env.set(druid::theme::BUTTON_DARK, Color::TRANSPARENT);
+    //        env.set(druid::theme::BUTTON_LIGHT, Color::TRANSPARENT);
+    //        env.set(druid::theme::DISABLED_BUTTON_DARK, Color::TRANSPARENT);
+    //        env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
+    //    })
+    //    .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
+    //    .padding(2.0);
+    //druid::widget::Scroll::new(
+    //    Flex::row()
+    //        .with_child(list)
+    //        .with_child(add))
+    //    .vertical()
+    //    .expand()
+    //    .border(druid::theme::BORDER_DARK, 2.0)
+    //    .rounded(2.0)
+    Scroll::new(list)
+        .vertical()
+        //.expand()
         .border(druid::theme::BORDER_DARK, 2.0)
         .rounded(2.0)
 }

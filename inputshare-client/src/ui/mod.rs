@@ -8,6 +8,7 @@ pub mod popup;
 pub mod theme;
 pub mod button;
 pub mod icons;
+pub mod list;
 
 pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, VirtualKey) + Send + 'static) {
     let handle = ctx.get_external_handle();
