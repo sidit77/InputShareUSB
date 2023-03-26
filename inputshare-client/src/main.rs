@@ -108,7 +108,7 @@ fn config_ui() -> impl Widget<Config> + 'static {
         .lens(Config::blacklist);
     let hotkey = hotkey_ui()
         .lens(Config::hotkey);
-    let keys = Flex::row()
+    let keys = Flex::column()
         .with_flex_child(hotkey, 1.0)
         .with_spacer(5.0)
         .with_flex_child(blacklist, 1.0);
@@ -138,16 +138,13 @@ fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
         }
     }).lens(Hotkey::modifiers);
     let trigger = Button::dynamic(|data: &VirtualKey, _| data.to_string())
-        .expand_width()
         .on_click(|ctx, _, _| open_key_picker(ctx, |data, key| {
             let hotkey = &mut data.config.hotkey;
             hotkey.modifiers.remove(key);
             hotkey.trigger = key;
         }))
         .lens(Hotkey::trigger);
-    Flex::column()
-        .with_child(Label::new("Hotkey")
-            .expand_width())
+    Flex::row()
         .with_flex_child(modifiers, 1.0)
         .with_child(Label::new("+"))
         .with_child(trigger)
@@ -183,6 +180,7 @@ fn blacklist_ui() -> impl Widget<VirtualKeySet> + 'static {
 
 fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet> + 'static {
     let list = List::new(key_ui)
+        .horizontal()
         .with_spacing(2.0)
         .padding((2.0, 2.0, 2.0, 0.0));
     let add = Button::new("Add new")
@@ -193,13 +191,12 @@ fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet
             env.set(druid::theme::DISABLED_BUTTON_LIGHT, Color::TRANSPARENT);
         })
         .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
-        .padding(2.0)
-        .expand_width();
+        .padding(2.0);
     druid::widget::Scroll::new(
-        Flex::column()
+        Flex::row()
             .with_child(list)
             .with_child(add))
-        .vertical()
+        .horizontal()
         .expand()
         .border(druid::theme::BORDER_DARK, 2.0)
         .rounded(2.0)
@@ -208,7 +205,6 @@ fn keyset_ui(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<VirtualKeySet
 fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
     Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
         .on_click(|_, (set, key), _| set.remove(*key))
-        .expand_width()
 }
 
 fn initiate_connection(ctx: &mut EventCtx) {
