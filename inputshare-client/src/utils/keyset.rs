@@ -123,7 +123,7 @@ impl ListIter<(VirtualKeySet, VirtualKey)> for VirtualKeySet {
 
     fn for_each_mut(&mut self, mut cb: impl FnMut(&mut (VirtualKeySet, VirtualKey), usize)) {
         let mut updated = *self;
-        for (i, mut item) in self.iter().enumerate() {
+        for (i, item) in self.iter().enumerate() {
             let mut tuple = (updated, item);
             cb(&mut tuple, i);
             updated = tuple.0;

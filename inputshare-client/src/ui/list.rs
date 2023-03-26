@@ -188,7 +188,7 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
 
         if let Some(end) = &mut self.end {
             let child_size = if bc_changed || end.layout_requested() {
-                end.layout(ctx, &child_bc, &mut (), env)
+                end.layout(ctx, &child_bc, &(), env)
             } else {
                 end.layout_rect().size()
             };

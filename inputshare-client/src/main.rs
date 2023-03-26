@@ -9,8 +9,8 @@ mod model;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{Button, CrossAxisAlignment, Flex, Label, List, Scroll, SizedBox, TextBox};
-use druid::{AppLauncher, Color, EventCtx, ExtEventSink, lens, Widget, WidgetExt, WindowDesc};
+use druid::widget::{Button, CrossAxisAlignment, Flex, Label, Scroll, SizedBox, TextBox};
+use druid::{AppLauncher, Color, EventCtx, ExtEventSink, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -19,7 +19,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use yawi::{InputHook, VirtualKey};
 use tokio::select;
 use tokio::time::Instant;
-use crate::model::{AppState, Config, ConnectionState, Hotkey, Side};
+use crate::model::{AppState, Config, ConnectionState, Hotkey};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::popup::Popup;
@@ -59,29 +59,6 @@ pub fn main() {
 }
 
 fn make_ui() -> impl Widget<AppState> {
-    //let ui = Flex::column()
-    //    .with_child(Label::dynamic(|data: &AppState, _| match data.connection_state {
-    //        ConnectionState::Connected(Side::Local) => "Local",
-    //        ConnectionState::Connected(Side::Remote) => "Remote",
-    //        ConnectionState::Disconnected => "Disconnected",
-    //        ConnectionState::Connecting => "Connecting"
-    //    }.to_string())
-    //        .with_text_size(25.0))
-    //    .with_spacer(20.0)
-    //    .with_child(Button::from_label(Label::dynamic(|data: &AppState, _| match data.connection_state {
-    //        ConnectionState::Connected(_) => "Disconnect",
-    //        ConnectionState::Disconnected => "Connect",
-    //        ConnectionState::Connecting => "Connecting"
-    //    }.to_string())
-    //        .with_text_size(17.0))
-    //        .fix_size(250.0, 65.0)
-    //        .on_click(|ctx, _, _| initiate_connection(ctx))
-    //        .disabled_if(|data: &AppState, _ | data.connection_state == ConnectionState::Connecting))
-    //    .with_default_spacer()
-    //    .with_child(Button::dynamic(|data: &AppState, _|data.config.hotkey.trigger.to_string())
-    //        .fix_width(250.0)
-    //        .on_click(|ctx, _, _ |  open_key_picker(ctx,  |data, key| data.config.hotkey.trigger = key)))
-    //    .center();
     let popup = Flex::column()
         .with_child(Label::new("Press any key"))
         .center();
@@ -126,7 +103,8 @@ fn host_ui() -> impl Widget<String> + 'static {
     let host = TextBox::new()
         .expand_width();
     let search = WidgetButton::new(Icon::from(CAST)
-        .padding(5.0));
+        .padding(5.0))
+        .on_click(|_,_,_|println!("Searching"));
     Flex::row()
         .with_flex_child(host, 1.0)
         .with_spacer(5.0)
@@ -202,11 +180,7 @@ fn status_ui() -> impl Widget<AppState> + 'static {
         .expand();
     let button = Button::new("Connect")
         .fix_width(100.0)
-        .on_click(|_, data: &mut AppState, _| data.connection_state = match data.connection_state {
-            ConnectionState::Connected(_) => ConnectionState::Disconnected,
-            ConnectionState::Connecting => ConnectionState::Disconnected,
-            ConnectionState::Disconnected => ConnectionState::Connecting
-        })
+        .on_click(|ctx, _, _| initiate_connection(ctx))
         .expand_height();
     Flex::row()
         .with_flex_child(status, 1.0)
