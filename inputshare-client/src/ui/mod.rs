@@ -1,10 +1,9 @@
 use std::cell::Cell;
 use druid::EventCtx;
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
-use crate::model::{AppState, ConnectionState};
+use crate::model::{AppState, ConnectionState, PopupType};
 use crate::runtime::ExtEventSinkCallback;
 
-pub mod popup;
 pub mod theme;
 pub mod button;
 pub mod icons;
@@ -30,7 +29,7 @@ pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, Vi
                         handle.add_rt_callback(move |rt, data| {
                             rt.hook = None;
                             setter(data, key);
-                            data.popup = false;
+                            data.popup = None;
                         });
                     }
                     HookAction::Block
@@ -38,6 +37,6 @@ pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, Vi
                 _ => HookAction::Continue,
             }
         }).map_err(|err| tracing::warn!("Could not register hook: {}", err)).ok();
-        data.popup = true;
+        data.popup = Some(PopupType::PressKey);
     })
 }

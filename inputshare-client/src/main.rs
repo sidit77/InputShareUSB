@@ -6,10 +6,11 @@ mod runtime;
 mod utils;
 mod model;
 
+use std::mem::Discriminant;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{Button, CrossAxisAlignment, Flex, Label, Scroll, SizedBox, TextBox};
+use druid::widget::{BackgroundBrush, Button, CrossAxisAlignment, Flex, Label, Maybe, Scroll, TextBox, ViewSwitcher};
 use druid::{AppLauncher, Color, EventCtx, ExtEventSink, Widget, WidgetExt, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -19,10 +20,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use yawi::{InputHook, VirtualKey};
 use tokio::select;
 use tokio::time::Instant;
-use crate::model::{AppState, Config, ConnectionState, Hotkey};
+use crate::model::{AppState, Config, ConnectionState, Hotkey, PopupType};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
-use crate::ui::popup::Popup;
 use crate::ui::{open_key_picker, theme};
 use crate::ui::button::WidgetButton;
 use crate::ui::icons::Icon;
@@ -59,15 +59,50 @@ pub fn main() {
 }
 
 fn make_ui() -> impl Widget<AppState> {
-    let popup = Flex::column()
-        .with_child(Label::new("Press any key"))
-        .center();
-    let popup = SizedBox::new(popup)
-        .width(200.0)
-        .height(100.0)
+    //Popup::new(|data: &AppState, _| data.popup != PopupType::None, popup_ui().lens(AppState::popup), main_ui())
+    let popup = Maybe::or_empty(||popup_ui())
+        .lens(AppState::popup);
+    druid::widget::ZStack::new(main_ui())
+        .with_centered_child(popup)
+}
+
+fn popup_ui() -> impl Widget<PopupType> + 'static {
+    ViewSwitcher::<PopupType, Discriminant<PopupType>>::new(|t, _| std::mem::discriminant(t), |_, s, _| match s {
+        PopupType::Searching(_) => {
+            tracing::trace!("Building presskey");
+            Flex::column()
+                .with_child(Label::dynamic(|data: &String, _|format!("{:?}", data)))
+                .with_child(Button::new("Back")
+                    .on_click(|ctx, _, _ | ctx.add_rt_callback(|rt, data| {
+                        if let Some(task) = &rt.mdns {
+                            task.abort();
+                        }
+                        rt.mdns = None;
+                        data.popup = None
+                    })))
+                .center()
+                .fix_size(200.0, 100.0)
+                .background(druid::theme::BACKGROUND_DARK)
+                .rounded(5.0)
+                .lens(PopupType::search())
+                .boxed()
+        }
+        PopupType::PressKey => {
+            tracing::trace!("Building presskey");
+            key_popup_ui().boxed()
+        }
+    })
+        .center()
+        .background(BackgroundBrush::Color(Color::rgba8(0, 0, 0, 128)))
+        .expand()
+}
+
+fn key_popup_ui() -> impl Widget<PopupType> + 'static {
+    Label::new("Press any key")
+        .center()
+        .fix_size(200.0, 100.0)
         .background(druid::theme::BACKGROUND_DARK)
-        .rounded(5.0);
-    Popup::new(|data: &AppState, _| data.popup, popup, main_ui())
+        .rounded(5.0)
 }
 
 fn main_ui() -> impl Widget<AppState> + 'static {
@@ -104,7 +139,27 @@ fn host_ui() -> impl Widget<String> + 'static {
         .expand_width();
     let search = WidgetButton::new(Icon::from(CAST)
         .padding(5.0))
-        .on_click(|_,_,_|println!("Searching"));
+        .on_click(|ctx,_,_|{
+            let handle = ctx.get_external_handle();
+            ctx.add_rt_callback(move |rt, data| {
+                let task = rt.runtime.spawn(async move {
+                    loop {
+                        tracing::trace!("Adding hash");
+                        handle.add_idle_callback(|data: &mut AppState| {
+                            match &mut data.popup {
+                                Some(PopupType::Searching(string)) => {
+                                    string.push('#');
+                                },
+                                _ => {}
+                            };
+                        });
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                });
+                rt.mdns = Some(task);
+                data.popup = Some(PopupType::Searching("Hello World".to_string()))
+            })
+        });
     Flex::row()
         .with_flex_child(host, 1.0)
         .with_spacer(5.0)

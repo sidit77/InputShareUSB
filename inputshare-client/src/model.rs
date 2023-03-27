@@ -60,9 +60,40 @@ pub enum ConnectionState {
     Disconnected
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Data)]
+pub enum PopupType {
+    Searching(String),
+    PressKey
+}
+
+impl PopupType {
+    pub fn search() -> impl Lens<PopupType, String> {
+        pub struct PopupLens;
+        impl Lens<PopupType, String> for PopupLens{
+            fn with<V, F: FnOnce(&String) -> V>(&self, data: &PopupType, f: F) -> V {
+                match data {
+                    PopupType::Searching(s) => f(s),
+                    _ => unreachable!()
+                }
+            }
+
+            fn with_mut<V, F: FnOnce(&mut String) -> V>(&self, data: &mut PopupType, f: F) -> V {
+                match data {
+                    PopupType::Searching(s) => f(s),
+                    _ => unreachable!()
+                }
+            }
+        }
+        return PopupLens;
+    }
+
+}
+
+
+
 #[derive(Default, Debug, Clone, Data, Lens)]
 pub struct AppState {
     pub config: Config,
     pub connection_state: ConnectionState,
-    pub popup: bool
+    pub popup: Option<PopupType>
 }
