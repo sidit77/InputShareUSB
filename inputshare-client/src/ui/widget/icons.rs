@@ -1,6 +1,6 @@
 use druid::{widget::prelude::*, Affine, Color, KeyOrValue, Size};
 use druid_material_icons::IconPaths;
-use crate::ui::theme;
+use crate::ui::widget::theme;
 
 #[derive(Debug, Clone)]
 pub struct Icon {

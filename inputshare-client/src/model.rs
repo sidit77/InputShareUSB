@@ -91,7 +91,7 @@ impl PopupType {
                 }
             }
         }
-        return PopupLens;
+        PopupLens
     }
 
 }
