@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use druid::{AppDelegate, Command, DelegateCtx, Env, EventCtx, ExtEventSink, Handled, Selector, Target};
+use mdns_sd::ServiceDaemon;
 use tokio::runtime::{Builder, Runtime};
-use tokio::task::JoinHandle;
 use yawi::InputHook;
 
 use crate::model::AppState;
@@ -31,7 +31,7 @@ impl ExtEventSinkCallback for &mut EventCtx<'_, '_> {
 pub struct RuntimeDelegate {
     pub hook: Option<InputHook>,
     pub runtime: Runtime,
-    pub mdns: Option<JoinHandle<()>>
+    pub mdns: Option<ServiceDaemon>
 }
 
 impl RuntimeDelegate {

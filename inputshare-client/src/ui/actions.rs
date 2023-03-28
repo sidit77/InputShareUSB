@@ -1,12 +1,14 @@
 use std::cell::Cell;
+use std::net::{IpAddr, SocketAddr};
 
-use druid::EventCtx;
+use druid::{EventCtx, ExtEventSink};
 use druid::im::Vector;
+use mdns_sd::{Receiver, ServiceDaemon, ServiceEvent};
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
-use crate::model::{AppState, ConnectionState, PopupType};
+use crate::model::{AppState, ConnectionState, PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
-use crate::{connection, search};
+use crate::{connection};
 
 pub fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
@@ -31,18 +33,48 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
 pub fn start_search(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
     ctx.add_rt_callback(move |rt, data| {
-        let task = rt.runtime.spawn(async move {
-            if let Err(err) = search(handle.clone()).await {
-                tracing::error!("mdns search failed: {}", err);
-                handle.add_rt_callback(|rt, data| {
-                    rt.mdns = None;
-                    data.popup = None;
-                });
+        let mdns = ServiceDaemon::new()
+            .map_err(|err| tracing::warn!("Could not start mdns service: {}", err))
+            .ok();
+        if let Some(mdns) = mdns {
+            match mdns.browse("_inputshare._udp.local.") {
+                Ok(receiver) => {
+                    rt.mdns = Some(mdns);
+                    data.popup = Some(PopupType::Searching(Vector::new()));
+                    rt.runtime.spawn(update_popup(receiver, handle));
+                }
+                Err(err) => {
+                    tracing::warn!("Could not browse: {}", err);
+                    stop_service(Some(mdns));
+                }
             }
-        });
-        rt.mdns = Some(task);
-        data.popup = Some(PopupType::Searching(Vector::new()))
+        }
     })
+}
+
+async fn update_popup(receiver: Receiver<ServiceEvent>, ctx: ExtEventSink) {
+    while let Ok(event) = receiver.recv_async().await {
+        if let ServiceEvent::ServiceResolved(info) = event {
+            ctx.add_idle_callback(move |data: &mut AppState| {
+                if let Some(PopupType::Searching(list)) = &mut data.popup {
+                    for addrs in info.get_addresses() {
+                        let addrs = SocketAddr::new(IpAddr::V4(*addrs), info.get_port());
+                        list.push_back(SearchResult {
+                            addrs,
+                        });
+                    }
+                }
+            });
+        }
+    }
+    tracing::trace!("Search popup is no longer updated");
+}
+
+pub fn stop_service(service: Option<ServiceDaemon>) {
+    if let Some(t) = service {
+        t.shutdown()
+            .unwrap_or_else(|err| tracing::warn!("Error shutting down mdns service: {}", err))
+    }
 }
 
 pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, VirtualKey) + Send + 'static) {

@@ -6,6 +6,7 @@ use druid::im::Vector;
 
 use crate::model::{PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
+use crate::ui::actions::stop_service;
 
 pub fn ui() -> impl Widget<PopupType> + 'static {
     ViewSwitcher::<PopupType, Discriminant<PopupType>>::new(
@@ -40,7 +41,7 @@ fn search_popup_ui() -> impl Widget<Vector<SearchResult>> + 'static {
         .with_spacer(5.0)
         .with_child(Button::new("Back").on_click(|ctx, _, _| {
             ctx.add_rt_callback(|rt, data| {
-                if let Some(t) = rt.mdns.take() { t.abort() }
+                stop_service(rt.mdns.take());
                 data.popup = None
             })
         }))
@@ -55,7 +56,7 @@ fn search_result_ui() -> impl Widget<SearchResult> + 'static {
             let addrs = data.addrs;
             ctx.add_rt_callback(move |rt, data| {
                 data.config.host_address = addrs.to_string();
-                if let Some(t) = rt.mdns.take() { t.abort() }
+                stop_service(rt.mdns.take());
                 data.popup = None;
             });
         })

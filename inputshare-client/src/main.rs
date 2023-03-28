@@ -14,8 +14,6 @@ use anyhow::Context;
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
-use searchlight::discovery::{Discovery, DiscoveryEvent};
-use searchlight::net::IpVersion;
 use tokio::select;
 use tokio::time::Instant;
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -24,7 +22,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yawi::InputHook;
 
-use crate::model::{AppState, PopupType, SearchResult};
+use crate::model::AppState;
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::widget::{theme, Theme};
@@ -38,6 +36,7 @@ pub fn main() {
                 .with_target("yawi", LevelFilter::TRACE)
                 .with_target("inputshare_client", LevelFilter::TRACE)
                 .with_target("inputshare_client::ui::widget::list", LevelFilter::DEBUG)
+                .with_target("mdns_sd", LevelFilter::INFO)
         )
         .with(layer().without_time())
         .init();
@@ -54,27 +53,6 @@ pub fn main() {
         .configure_env(|env, _| theme::setup_theme(Theme::Light, env))
         .launch(AppState::default())
         .expect("launch failed");
-}
-
-async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
-    Discovery::builder()
-        .service("_inputshare._udp.local")? //._http._tcp.local.
-        .build(IpVersion::Both)?
-        .run_async(move |event| {
-            ctx.add_idle_callback(move |data: &mut AppState| {
-                if let Some(PopupType::Searching(results)) = &mut data.popup {
-                    match event {
-                        DiscoveryEvent::ResponderFound(resp) => {
-                            results.push_back(SearchResult { addrs: resp.addr });
-                        }
-                        DiscoveryEvent::ResponderLost(_) => {}
-                        DiscoveryEvent::ResponseUpdate { .. } => {}
-                    }
-                }
-            });
-        })
-        .await?;
-    Ok(())
 }
 
 async fn connection(sink: &ExtEventSink, host: &str) -> anyhow::Result<()> {

@@ -1,14 +1,12 @@
 mod configfs;
 mod receiver;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use bytes::Bytes;
 use clap::{Parser, command, arg};
+use mdns_sd::{ServiceDaemon, ServiceInfo};
 use quinn::{Connecting, ConnectionError, Endpoint, ServerConfig};
-use searchlight::broadcast::{BroadcasterBuilder, ServiceBuilder};
-use searchlight::net::IpVersion;
 use tokio::select;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -49,6 +47,7 @@ async fn main() -> Result<()> {
                 .with_default(LevelFilter::DEBUG)
                 .with_target("inputshare_server::configfs", LevelFilter::DEBUG)
                 .with_target("inputshare_server", LevelFilter::TRACE)
+                .with_target("mdns_sd", LevelFilter::INFO)
         )
         .with(layer().without_time())
         .try_init()?;
@@ -66,8 +65,25 @@ async fn main() -> Result<()> {
     tracing::debug!("Attempting to bind {}", interface);
     let endpoint = Endpoint::server(server_config, interface)?;
 
-    start_mdns(interface)
-        .unwrap_or_else(|err| tracing::warn!("Failed to start dns service: {}", err));
+    let mdns = ServiceDaemon::new()?;
+    {
+        let properties = vec![("PATH", "one"), ("Path", "two"), ("PaTh", "three")];
+        let service_info = ServiceInfo::new(
+            "_inputshare._udp.local.",
+            "InputShare Server",
+            "inputshare.local.",
+            "",
+            interface.port(),
+            &properties[..],
+        )?.enable_addr_auto();
+        mdns.register(service_info)?;
+        let monitor = mdns.monitor()?;
+        tokio::spawn(async move {
+            while let Ok(event) = monitor.recv_async().await {
+                tracing::trace!("ndms daemon event: {:?}", &event);
+            }
+        });
+    }
 
     select! {
         res = server(endpoint, args) => {
@@ -79,6 +95,7 @@ async fn main() -> Result<()> {
             tracing::debug!("Received quit signal");
         }
     };
+    mdns.shutdown()?;
     Ok(())
 }
 
@@ -147,7 +164,6 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
     }
 }
 
-#[allow(dead_code)]
 async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     tracing::debug!("Starting print processor");
@@ -160,7 +176,6 @@ async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     Ok(sender)
 }
 
-#[allow(dead_code)]
 async fn configfs_input_processor(args: Args) -> Result<UnboundedSender<InputEvent>> {
     use configfs::*;
     let mut keyboard = Keyboard::new().await?;
@@ -221,39 +236,4 @@ async fn configfs_input_processor(args: Args) -> Result<UnboundedSender<InputEve
         tracing::debug!("Stopping configfs processor");
     });
     Ok(sender)
-}
-
-fn start_mdns(interface: SocketAddr) -> Result<()> {
-    let port = interface.port();
-    let ip = match interface.ip() {
-        ip if ip == IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) => {
-            tracing::debug!("Searching for interface..");
-            if_addrs::get_if_addrs()?
-                .into_iter()
-                .map(|i| i.addr.ip())
-                .filter(|i| !i.is_loopback() && i.is_ipv4())
-                .next()
-        },
-        ip => {
-            tracing::debug!("Interface specified...");
-            Some(ip)
-        }
-    };
-    match ip {
-        None => bail!("Unable to retrieve ip address"),
-        Some(ip) => {
-            tracing::debug!("Using {} for mdns", ip);
-            BroadcasterBuilder::new()
-                .add_service(
-                    ServiceBuilder::new("_inputshare._udp.local.", "Inputshare", port)?
-                        .add_ip_address(ip)
-                        .add_txt_truncated("key=value")
-                        .add_txt_truncated("key2=value2")
-                        .build()?,
-                )
-                .build(IpVersion::V4)?
-                .run_in_background();
-            Ok(())
-        }
-    }
 }

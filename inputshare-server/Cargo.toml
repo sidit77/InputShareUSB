@@ -18,9 +18,7 @@ byteorder = "1"
 bytes = "1"
 bitflags = "2"
 clap = { version = "4.1", features = ["derive"] }
-if-addrs = "0.10"
 mdns-sd = "0.7"
-# searchlight = { git = "https://github.com/sidit77/searchlight.git", default-features = false, features = ["broadcast"] }
 inputshare-common = { path = "../lib/inputshare-common" }
 
 # log = "0.4"

@@ -19,7 +19,7 @@ bytes = "1"
 # futures-util = "0.3"
 quinn = "0.9"
 rustls = { version = "0.20", default-features = false, features = ["quic", "dangerous_configuration"] }
-searchlight = { git = "https://github.com/sidit77/searchlight.git", default-features = false, features = ["discovery"] }
+mdns-sd = "0.7"
 
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"
