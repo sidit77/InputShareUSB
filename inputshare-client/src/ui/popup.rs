@@ -35,17 +35,30 @@ fn key_popup_ui() -> impl Widget<PopupType> + 'static {
 
 fn search_popup_ui() -> impl Widget<Vector<SearchResult>> + 'static {
     Flex::column()
-        .with_child(List::new(|| Label::dynamic(|res: &SearchResult, _| res.addrs.to_string())))
+        .with_child(Label::new("Available Devices"))
+        .with_child(List::new(search_result_ui))
+        .with_spacer(5.0)
         .with_child(Button::new("Back").on_click(|ctx, _, _| {
             ctx.add_rt_callback(|rt, data| {
                 if let Some(t) = rt.mdns.take() { t.abort() }
                 data.popup = None
             })
         }))
-        .center()
-        .fix_size(200.0, 100.0)
+        .padding(10.0)
         .background(druid::theme::BACKGROUND_DARK)
         .rounded(5.0)
+}
+
+fn search_result_ui() -> impl Widget<SearchResult> + 'static {
+    Button::dynamic(|res: &SearchResult, _| res.addrs.to_string())
+        .on_click(|ctx, data: &mut SearchResult, _| {
+            let addrs = data.addrs;
+            ctx.add_rt_callback(move |rt, data| {
+                data.config.host_address = addrs.to_string();
+                if let Some(t) = rt.mdns.take() { t.abort() }
+                data.popup = None;
+            });
+        })
 }
 
 fn search_lens() -> impl Lens<PopupType, Vector<SearchResult>> {
