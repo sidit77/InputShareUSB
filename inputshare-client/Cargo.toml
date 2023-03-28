@@ -15,14 +15,15 @@ error-tools = { git = "https://github.com/sidit77/error-tools.git", features = [
 
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
-futures-lite = "1"
+# futures-lite = "1"
 # futures-util = "0.3"
 quinn = "0.9"
 rustls = { version = "0.20", default-features = false, features = ["quic", "dangerous_configuration"] }
+searchlight = { git = "https://github.com/sidit77/searchlight.git", default-features = false, features = ["discovery"] }
 
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"
-druid = { version = "0.8", features = ["serde"] }
+druid = { version = "0.8", features = ["serde", "im"] }
 druid-material-icons = "0.2"
 
 inputshare-common = { path = "../lib/inputshare-common" }

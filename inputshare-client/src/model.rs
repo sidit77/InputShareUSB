@@ -1,5 +1,7 @@
+use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};
 use druid::{Data, Lens};
+use druid::im::Vector;
 use yawi::VirtualKey;
 use crate::utils::keyset::VirtualKeySet;
 
@@ -62,22 +64,27 @@ pub enum ConnectionState {
 
 #[derive(Debug, Clone, Eq, PartialEq, Data)]
 pub enum PopupType {
-    Searching(String),
+    Searching(Vector<SearchResult>),
     PressKey
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Data)]
+pub struct SearchResult {
+    pub addrs: SocketAddr
+}
+
 impl PopupType {
-    pub fn search() -> impl Lens<PopupType, String> {
+    pub fn search() -> impl Lens<PopupType, Vector<SearchResult>> {
         pub struct PopupLens;
-        impl Lens<PopupType, String> for PopupLens{
-            fn with<V, F: FnOnce(&String) -> V>(&self, data: &PopupType, f: F) -> V {
+        impl Lens<PopupType, Vector<SearchResult>> for PopupLens{
+            fn with<V, F: FnOnce(&Vector<SearchResult>) -> V>(&self, data: &PopupType, f: F) -> V {
                 match data {
                     PopupType::Searching(s) => f(s),
                     _ => unreachable!()
                 }
             }
 
-            fn with_mut<V, F: FnOnce(&mut String) -> V>(&self, data: &mut PopupType, f: F) -> V {
+            fn with_mut<V, F: FnOnce(&mut Vector<SearchResult>) -> V>(&self, data: &mut PopupType, f: F) -> V {
                 match data {
                     PopupType::Searching(s) => f(s),
                     _ => unreachable!()

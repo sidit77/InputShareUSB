@@ -10,8 +10,9 @@ use std::mem::Discriminant;
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::Bytes;
-use druid::widget::{BackgroundBrush, Button, CrossAxisAlignment, Flex, Label, Maybe, Scroll, TextBox, ViewSwitcher};
+use druid::widget::{BackgroundBrush, Button, CrossAxisAlignment, Flex, Label, List, Maybe, Scroll, TextBox, ViewSwitcher};
 use druid::{AppLauncher, Color, EventCtx, ExtEventSink, Widget, WidgetExt, WindowDesc};
+use druid::im::Vector;
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -20,7 +21,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use yawi::{InputHook, VirtualKey};
 use tokio::select;
 use tokio::time::Instant;
-use crate::model::{AppState, Config, ConnectionState, Hotkey, PopupType};
+use crate::model::{AppState, Config, ConnectionState, Hotkey, PopupType, SearchResult};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::{open_key_picker, theme};
@@ -31,6 +32,8 @@ use crate::utils::{hook, process_hook_event, SkipServerVerification};
 use crate::utils::keyset::VirtualKeySet;
 use druid_material_icons::normal::hardware::CAST;
 use druid_material_icons::normal::content::ADD;
+use searchlight::discovery::{Discovery, DiscoveryEvent};
+use searchlight::net::IpVersion;
 use crate::ui::list::WrappingList;
 
 pub fn main() {
@@ -69,9 +72,8 @@ fn make_ui() -> impl Widget<AppState> {
 fn popup_ui() -> impl Widget<PopupType> + 'static {
     ViewSwitcher::<PopupType, Discriminant<PopupType>>::new(|t, _| std::mem::discriminant(t), |_, s, _| match s {
         PopupType::Searching(_) => {
-            tracing::trace!("Building presskey");
             Flex::column()
-                .with_child(Label::dynamic(|data: &String, _|format!("{:?}", data)))
+                .with_child(List::new(||Label::dynamic(|res: &SearchResult, _| res.addrs.to_string())))
                 .with_child(Button::new("Back")
                     .on_click(|ctx, _, _ | ctx.add_rt_callback(|rt, data| {
                         if let Some(task) = &rt.mdns {
@@ -87,10 +89,7 @@ fn popup_ui() -> impl Widget<PopupType> + 'static {
                 .lens(PopupType::search())
                 .boxed()
         }
-        PopupType::PressKey => {
-            tracing::trace!("Building presskey");
-            key_popup_ui().boxed()
-        }
+        PopupType::PressKey => key_popup_ui().boxed()
     })
         .center()
         .background(BackgroundBrush::Color(Color::rgba8(0, 0, 0, 128)))
@@ -139,27 +138,7 @@ fn host_ui() -> impl Widget<String> + 'static {
         .expand_width();
     let search = WidgetButton::new(Icon::from(CAST)
         .padding(5.0))
-        .on_click(|ctx,_,_|{
-            let handle = ctx.get_external_handle();
-            ctx.add_rt_callback(move |rt, data| {
-                let task = rt.runtime.spawn(async move {
-                    loop {
-                        tracing::trace!("Adding hash");
-                        handle.add_idle_callback(|data: &mut AppState| {
-                            match &mut data.popup {
-                                Some(PopupType::Searching(string)) => {
-                                    string.push('#');
-                                },
-                                _ => {}
-                            };
-                        });
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                });
-                rt.mdns = Some(task);
-                data.popup = Some(PopupType::Searching("Hello World".to_string()))
-            })
-        });
+        .on_click(|ctx,_,_|start_search(ctx));
     Flex::row()
         .with_flex_child(host, 1.0)
         .with_spacer(5.0)
@@ -244,7 +223,45 @@ fn status_ui() -> impl Widget<AppState> + 'static {
         .fix_height(50.0)
 }
 
+fn start_search(ctx: &mut EventCtx) {
+    let handle = ctx.get_external_handle();
+    ctx.add_rt_callback(move |rt, data| {
+        let task = rt.runtime.spawn(async move {
+            if let Err(err) = search(handle.clone()).await {
+                tracing::error!("mdns search failed: {}", err);
+                handle.add_rt_callback(|rt, data| {
+                   rt.mdns = None;
+                   data.popup = None;
+                });
+            }
+        });
+        rt.mdns = Some(task);
+        data.popup = Some(PopupType::Searching(Vector::new()))
+    })
+}
 
+async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
+    Discovery::builder()
+        .service("_http._tcp.local.")?
+        .build(IpVersion::Both)?
+        .run_async(move |event| {
+            ctx.add_idle_callback(move |data: &mut AppState| {
+                if let Some(PopupType::Searching(results)) = &mut data.popup {
+                    match event {
+                        DiscoveryEvent::ResponderFound(resp) => {
+                            results.push_back(SearchResult {
+                                addrs: resp.addr,
+                            });
+                        }
+                        DiscoveryEvent::ResponderLost(_) => {}
+                        DiscoveryEvent::ResponseUpdate { .. } => {}
+                    }
+                }
+            });
+        })
+        .await?;
+    Ok(())
+}
 
 fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
@@ -282,7 +299,7 @@ async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
         let timeout = async move {
             match deadline {
                 Some(deadline) => tokio::time::sleep_until(deadline).await,
-                None => futures_lite::future::pending().await
+                None => std::future::pending().await
             };
         };
         select! {
