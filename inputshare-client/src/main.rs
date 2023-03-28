@@ -58,7 +58,7 @@ pub fn main() {
 
 async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
     Discovery::builder()
-        .service("_http._tcp.local.")?
+        .service("_inputshare._udp.local")? //._http._tcp.local.
         .build(IpVersion::Both)?
         .run_async(move |event| {
             ctx.add_idle_callback(move |data: &mut AppState| {
