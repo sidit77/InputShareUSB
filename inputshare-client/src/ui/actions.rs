@@ -14,8 +14,9 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
         rt.hook = None;
         if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected {
             data.connection_state = ConnectionState::Connecting;
+            let host = data.config.host_address.clone();
             rt.runtime.spawn(async move {
-                connection(&handle)
+                connection(&handle, &host)
                     .await
                     .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
                 handle.add_rt_callback(|rt, data| {

@@ -6,8 +6,10 @@ mod sender;
 mod ui;
 mod utils;
 
+use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
+use anyhow::Context;
 
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
@@ -75,8 +77,8 @@ async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
-    let connection = connect().await?;
+async fn connection(sink: &ExtEventSink, host: &str) -> anyhow::Result<()> {
+    let connection = connect(host).await?;
     tracing::debug!("Connected to {}", connection.remote_address());
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     sink.add_rt_callback(|rt, data| {
@@ -121,7 +123,7 @@ async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn connect() -> anyhow::Result<Connection> {
+async fn connect(host: &str) -> anyhow::Result<Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -134,8 +136,12 @@ async fn connect() -> anyhow::Result<Connection> {
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
     endpoint.set_default_client_config(config);
 
+    let addrs = host.to_socket_addrs()?
+        .find(|a| a.is_ipv4())
+        .context("Could not resolve host")?;
+    tracing::debug!("Resolved {} to {}", host, addrs);
     let connection = endpoint
-        .connect("127.0.0.1:12345".parse()?, "dummy")?
+        .connect(addrs, "dummy")?
         .await?;
     Ok(connection)
 }
