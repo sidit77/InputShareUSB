@@ -1,13 +1,13 @@
 mod enums;
-mod send;
 mod hook;
 mod message;
 mod query;
+mod send;
 
 pub type WinResult<T> = windows::core::Result<T>;
 
-pub use enums::{KeyState, VirtualKey, ScrollDirection, WindowsScanCode, InputEvent, Input, KeyEvent};
-pub use hook::{InputHook, HookFn, HookAction};
-pub use send::{send_inputs, send_input};
-pub use message::{run, quit};
-pub use query::{get_cursor_pos};
+pub use enums::{Input, InputEvent, KeyEvent, KeyState, ScrollDirection, VirtualKey, WindowsScanCode};
+pub use hook::{HookAction, HookFn, InputHook};
+pub use message::{quit, run};
+pub use query::get_cursor_pos;
+pub use send::{send_input, send_inputs};

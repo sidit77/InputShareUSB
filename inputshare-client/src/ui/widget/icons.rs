@@ -1,11 +1,13 @@
-use druid::{widget::prelude::*, Affine, Color, KeyOrValue, Size};
+use druid::widget::prelude::*;
+use druid::{Affine, Color, KeyOrValue, Size};
 use druid_material_icons::IconPaths;
+
 use crate::ui::widget::theme;
 
 #[derive(Debug, Clone)]
 pub struct Icon {
     paths: IconPaths,
-    color: KeyOrValue<Color>,
+    color: KeyOrValue<Color>
 }
 
 impl Icon {
@@ -13,7 +15,7 @@ impl Icon {
     pub fn new(paths: IconPaths) -> Self {
         Self {
             paths,
-            color: KeyOrValue::from(theme::ICON_COLOR),
+            color: KeyOrValue::from(theme::ICON_COLOR)
         }
     }
 
@@ -51,19 +53,16 @@ impl<T: Data> Widget<T> for Icon {
         bc.constrain_aspect_ratio(self.paths.size.aspect_ratio(), self.paths.size.width)
     }
     fn paint(&mut self, ctx: &mut PaintCtx, _data: &T, env: &Env) {
-        let color = match !ctx.is_disabled(){
+        let color = match !ctx.is_disabled() {
             true => self.color.resolve(env),
             false => env.get(theme::DISABLED_ICON_COLOR)
         };
         let Size { width, height } = ctx.size();
         let Size {
             width: icon_width,
-            height: icon_height,
+            height: icon_height
         } = self.paths.size;
-        ctx.transform(Affine::scale_non_uniform(
-            width * icon_width.recip(),
-            height * icon_height.recip(),
-        ));
+        ctx.transform(Affine::scale_non_uniform(width * icon_width.recip(), height * icon_height.recip()));
         for path in self.paths.paths {
             ctx.fill(path, &color);
         }

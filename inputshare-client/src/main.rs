@@ -1,46 +1,44 @@
 #![windows_subsystem = "windows"]
 
+mod model;
+mod runtime;
 mod sender;
 mod ui;
-mod runtime;
 mod utils;
-mod model;
-
 
 use std::sync::Arc;
 use std::time::Duration;
-use bytes::Bytes;
 
-use druid::{AppLauncher, EventCtx, ExtEventSink, WindowDesc};
+use bytes::Bytes;
 use druid::im::Vector;
+use druid::{AppLauncher, EventCtx, ExtEventSink, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
+use searchlight::discovery::{Discovery, DiscoveryEvent};
+use searchlight::net::IpVersion;
+use tokio::select;
+use tokio::time::Instant;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use yawi::{InputHook};
-use tokio::select;
-use tokio::time::Instant;
+use yawi::InputHook;
+
 use crate::model::{AppState, ConnectionState, PopupType, SearchResult};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
+use crate::ui::widget::{theme, Theme};
 use crate::utils::{hook, process_hook_event, SkipServerVerification};
-
-
-
-use searchlight::discovery::{Discovery, DiscoveryEvent};
-use searchlight::net::IpVersion;
-use crate::ui::widget::{Theme, theme};
 
 pub fn main() {
     tracing_subscriber::registry()
-        .with(Targets::new()
-            .with_default(LevelFilter::DEBUG)
-            .with_target("yawi", LevelFilter::TRACE)
-            .with_target("inputshare_client", LevelFilter::TRACE)
-            .with_target("inputshare_client::ui::widget::list", LevelFilter::DEBUG))
-        .with(layer()
-            .without_time())
+        .with(
+            Targets::new()
+                .with_default(LevelFilter::DEBUG)
+                .with_target("yawi", LevelFilter::TRACE)
+                .with_target("inputshare_client", LevelFilter::TRACE)
+                .with_target("inputshare_client::ui::widget::list", LevelFilter::DEBUG)
+        )
+        .with(layer().without_time())
         .init();
 
     #[cfg(not(debug_assertions))]
@@ -57,8 +55,6 @@ pub fn main() {
         .expect("launch failed");
 }
 
-
-
 fn start_search(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
     ctx.add_rt_callback(move |rt, data| {
@@ -66,8 +62,8 @@ fn start_search(ctx: &mut EventCtx) {
             if let Err(err) = search(handle.clone()).await {
                 tracing::error!("mdns search failed: {}", err);
                 handle.add_rt_callback(|rt, data| {
-                   rt.mdns = None;
-                   data.popup = None;
+                    rt.mdns = None;
+                    data.popup = None;
                 });
             }
         });
@@ -85,9 +81,7 @@ async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
                 if let Some(PopupType::Searching(results)) = &mut data.popup {
                     match event {
                         DiscoveryEvent::ResponderFound(resp) => {
-                            results.push_back(SearchResult {
-                                addrs: resp.addr,
-                            });
+                            results.push_back(SearchResult { addrs: resp.addr });
                         }
                         DiscoveryEvent::ResponderLost(_) => {}
                         DiscoveryEvent::ResponseUpdate { .. } => {}
@@ -103,13 +97,13 @@ fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
     ctx.add_rt_callback(move |rt, data| {
         rt.hook = None;
-        if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected{
+        if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected {
             data.connection_state = ConnectionState::Connecting;
             rt.runtime.spawn(async move {
                 connection(&handle)
                     .await
                     .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
-                handle.add_rt_callback(|rt, data | {
+                handle.add_rt_callback(|rt, data| {
                     rt.hook = None;
                     data.connection_state = ConnectionState::Disconnected;
                 });
@@ -117,7 +111,6 @@ fn initiate_connection(ctx: &mut EventCtx) {
         }
     })
 }
-
 
 async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     let connection = connect().await?;
@@ -165,7 +158,6 @@ async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {
     Ok(())
 }
 
-
 async fn connect() -> anyhow::Result<Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
@@ -179,7 +171,8 @@ async fn connect() -> anyhow::Result<Connection> {
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
     endpoint.set_default_client_config(config);
 
-    let connection = endpoint.connect("127.0.0.1:12345".parse()?, "dummy")?.await?;
+    let connection = endpoint
+        .connect("127.0.0.1:12345".parse()?, "dummy")?
+        .await?;
     Ok(connection)
 }
-

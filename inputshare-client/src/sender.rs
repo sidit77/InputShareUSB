@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
-use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
 use std::io::{Result, Write};
+
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use inputshare_common::{ConsumerDeviceCode, HidButtonCode, HidKeyCode, MessageType, MouseType, Vec2};
 
 #[derive(Debug)]
 pub struct InputSender {
@@ -17,9 +18,8 @@ pub struct InputSender {
 }
 
 impl InputSender {
-    
     pub fn new(mouse_speed_factor: f32) -> Self {
-        Self{
+        Self {
             local_sequence: 1,
             remote_sequence: 0,
             packet_buffer: Vec::new(),
@@ -42,7 +42,6 @@ impl InputSender {
             self.local_mouse_pos.x += x;
             self.local_mouse_pos.y += y;
         }
-
     }
 
     //pub fn shutdown_remote(&mut self) {
@@ -54,38 +53,46 @@ impl InputSender {
     }
 
     pub fn press_key(&mut self, key: HidKeyCode) {
-        self.message_queue.push_back([MessageType::KeyPress.into(), key.into()])
+        self.message_queue
+            .push_back([MessageType::KeyPress.into(), key.into()])
     }
 
     pub fn release_key(&mut self, key: HidKeyCode) {
-        self.message_queue.push_back([MessageType::KeyRelease.into(), key.into()])
+        self.message_queue
+            .push_back([MessageType::KeyRelease.into(), key.into()])
     }
 
     pub fn press_mouse_button(&mut self, button: HidButtonCode) {
-        self.message_queue.push_back([MessageType::MouseButtonPress.into(), button.into()])
+        self.message_queue
+            .push_back([MessageType::MouseButtonPress.into(), button.into()])
     }
 
     pub fn release_mouse_button(&mut self, button: HidButtonCode) {
-        self.message_queue.push_back([MessageType::MouseButtonRelease.into(), button.into()])
+        self.message_queue
+            .push_back([MessageType::MouseButtonRelease.into(), button.into()])
     }
 
     pub fn press_consumer_device(&mut self, button: ConsumerDeviceCode) {
-        self.message_queue.push_back([MessageType::ConsumerDevicePress.into(), button.into()])
+        self.message_queue
+            .push_back([MessageType::ConsumerDevicePress.into(), button.into()])
     }
 
     pub fn release_consumer_device(&mut self, button: ConsumerDeviceCode) {
-        self.message_queue.push_back([MessageType::ConsumerDeviceRelease.into(), button.into()])
+        self.message_queue
+            .push_back([MessageType::ConsumerDeviceRelease.into(), button.into()])
     }
 
     pub fn scroll_horizontal(&mut self, amount: i8) {
-        self.message_queue.push_back([MessageType::HorizontalScrolling.into(), amount as u8])
+        self.message_queue
+            .push_back([MessageType::HorizontalScrolling.into(), amount as u8])
     }
 
     pub fn scroll_vertical(&mut self, amount: i8) {
-        self.message_queue.push_back([MessageType::VerticalScrolling.into(), amount as u8])
+        self.message_queue
+            .push_back([MessageType::VerticalScrolling.into(), amount as u8])
     }
 
-    pub fn in_sync(&self) -> bool{
+    pub fn in_sync(&self) -> bool {
         self.local_mouse_pos == self.remote_mouse_pos && self.message_queue.is_empty()
     }
 
@@ -107,18 +114,22 @@ impl InputSender {
 
     pub fn write_packet(&mut self) -> Result<&[u8]> {
         self.packet_buffer.clear();
-        self.packet_buffer.write_u64::<LittleEndian>(self.local_sequence)?;
-        self.packet_buffer.write_i64::<LittleEndian>(self.local_mouse_pos.x)?;
-        self.packet_buffer.write_i64::<LittleEndian>(self.local_mouse_pos.y)?;
-        self.packet_buffer.write_u64::<LittleEndian>(self.last_message)?;
+        self.packet_buffer
+            .write_u64::<LittleEndian>(self.local_sequence)?;
+        self.packet_buffer
+            .write_i64::<LittleEndian>(self.local_mouse_pos.x)?;
+        self.packet_buffer
+            .write_i64::<LittleEndian>(self.local_mouse_pos.y)?;
+        self.packet_buffer
+            .write_u64::<LittleEndian>(self.last_message)?;
         let size_index = self.packet_buffer.len();
         self.packet_buffer.write_u8(0)?;
         for i in 0..usize::min(self.message_queue.len(), u8::MAX as usize) {
             self.packet_buffer[size_index] += 1;
-            self.packet_buffer.write_all(self.message_queue.get(i).unwrap())?;
+            self.packet_buffer
+                .write_all(self.message_queue.get(i).unwrap())?;
         }
         self.local_sequence += 1;
         Ok(self.packet_buffer.as_slice())
     }
-
 }

@@ -1,11 +1,13 @@
 // partially adapted from https://github.com/timokroeger/kbremap
 
 use std::cell::Cell;
-use crate::{VirtualKey, ScrollDirection, KeyState, WindowsScanCode, InputEvent, WinResult};
 use std::convert::{TryFrom, TryInto};
+
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+
+use crate::{InputEvent, KeyState, ScrollDirection, VirtualKey, WinResult, WindowsScanCode};
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum HookAction {
@@ -18,7 +20,6 @@ pub enum HookAction {
 pub struct HookFn(Box<dyn FnMut(InputEvent) -> HookAction>);
 
 impl HookFn {
-
     pub fn new(callback: impl FnMut(InputEvent) -> HookAction + 'static) -> Self {
         Self(Box::new(callback))
     }
@@ -47,23 +48,13 @@ impl InputHook {
     #[must_use = "The hook will immediately be unregistered and not work."]
     pub fn register(callback: impl Into<HookFn>) -> WinResult<InputHook> {
         HOOK.with(|state| {
-            assert!(
-                state.take().is_none(),
-                "Only one keyboard hook can be registered per thread."
-            );
+            assert!(state.take().is_none(), "Only one keyboard hook can be registered per thread.");
 
             tracing::trace!("Registering system hooks");
-            let keyboard = unsafe {
-                SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), HINSTANCE::default(), 0)?
-            };
-            let mouse = unsafe {
-                SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), HINSTANCE::default(), 0)?
-            };
+            let keyboard = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), HINSTANCE::default(), 0)? };
+            let mouse = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), HINSTANCE::default(), 0)? };
             state.set(Some(callback.into()));
-            Ok(InputHook {
-                keyboard,
-                mouse,
-            })
+            Ok(InputHook { keyboard, mouse })
         })
     }
 }
@@ -83,20 +74,24 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
         let event = match parse_virtual_key(&key_struct) {
             Some(key) => match parse_key_state(wparam) {
                 Some(state) => Some(InputEvent::KeyboardKeyEvent(key, parse_scancode(&key_struct), state)),
-                None => {tracing::warn!("Unknown event: {}", wparam.0); None}
+                None => {
+                    tracing::warn!("Unknown event: {}", wparam.0);
+                    None
+                }
+            },
+            None => {
+                tracing::warn!("Unknown key: {}", key_struct.vkCode);
+                None
             }
-            None => {tracing::warn!("Unknown key: {}", key_struct.vkCode); None}
         };
 
         if let Some(event) = event {
             let mut handled = HookAction::Continue;
-            HOOK.with(|state| {
-                match state.take() {
-                    None => tracing::warn!("Keyboard hook callback was already taken"),
-                    Some(mut callback) => {
-                        handled = callback.handle(event);
-                        state.set(Some(callback));
-                    }
+            HOOK.with(|state| match state.take() {
+                None => tracing::warn!("Keyboard hook callback was already taken"),
+                Some(mut callback) => {
+                    handled = callback.handle(event);
+                    state.set(Some(callback));
                 }
             });
             if handled == HookAction::Block {
@@ -109,8 +104,8 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
 
 unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let key_struct = (lparam.0 as *const MSLLHOOKSTRUCT).read();
-    if code == HC_ACTION as i32 &&  key_struct.flags & LLMHF_INJECTED == 0 {
-        let event = match wparam.0 as u32{
+    if code == HC_ACTION as i32 && key_struct.flags & LLMHF_INJECTED == 0 {
+        let event = match wparam.0 as u32 {
             WM_LBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Pressed)),
             WM_LBUTTONUP => Some(InputEvent::MouseButtonEvent(VirtualKey::LButton, KeyState::Released)),
             WM_RBUTTONDOWN => Some(InputEvent::MouseButtonEvent(VirtualKey::RButton, KeyState::Pressed)),
@@ -124,18 +119,19 @@ unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam
             WM_MOUSEMOVE => Some(InputEvent::MouseMoveEvent(key_struct.pt.x, key_struct.pt.y)),
             WM_MOUSEWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Vertical(parse_wheel_delta(&key_struct)))),
             WM_MOUSEHWHEEL => Some(InputEvent::MouseWheelEvent(ScrollDirection::Horizontal(parse_wheel_delta(&key_struct)))),
-            _ => {tracing::warn!("Unknown: {}", wparam.0); None}
+            _ => {
+                tracing::warn!("Unknown: {}", wparam.0);
+                None
+            }
         };
 
         if let Some(event) = event {
             let mut handled = HookAction::Continue;
-            HOOK.with(|state| {
-                match state.take() {
-                    None => tracing::warn!("Mouse hook callback was already taken"),
-                    Some(mut callback) => {
-                        handled = callback.handle(event);
-                        state.set(Some(callback));
-                    }
+            HOOK.with(|state| match state.take() {
+                None => tracing::warn!("Mouse hook callback was already taken"),
+                Some(mut callback) => {
+                    handled = callback.handle(event);
+                    state.set(Some(callback));
                 }
             });
             if handled == HookAction::Block {
@@ -146,11 +142,11 @@ unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
 
-fn parse_wheel_delta(key_struct: &MSLLHOOKSTRUCT) -> f32{
+fn parse_wheel_delta(key_struct: &MSLLHOOKSTRUCT) -> f32 {
     (key_struct.mouseData >> 16) as i16 as f32 / WHEEL_DELTA as f32
 }
 
-fn parse_xbutton(key_struct: &MSLLHOOKSTRUCT) -> Option<VirtualKey>{
+fn parse_xbutton(key_struct: &MSLLHOOKSTRUCT) -> Option<VirtualKey> {
     match (key_struct.mouseData >> 16) as u16 {
         XBUTTON1 => Some(VirtualKey::XButton1),
         XBUTTON2 => Some(VirtualKey::XButton2),
@@ -168,7 +164,7 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
     let mut scancode = key_struct.scanCode as WindowsScanCode;
     let vk = VIRTUAL_KEY(key_struct.vkCode as u16);
     if scancode == 0x0 || vk == VK_SNAPSHOT || vk == VK_SCROLL || vk == VK_PAUSE || vk == VK_NUMLOCK {
-        scancode = unsafe {MapVirtualKeyW(key_struct.vkCode, MAPVK_VK_TO_VSC_EX)} as WindowsScanCode;
+        scancode = unsafe { MapVirtualKeyW(key_struct.vkCode, MAPVK_VK_TO_VSC_EX) } as WindowsScanCode;
     } else if key_struct.flags & LLKHF_EXTENDED == LLKHF_EXTENDED {
         scancode |= 0xe000;
     }
@@ -176,15 +172,19 @@ fn parse_scancode(key_struct: &KBDLLHOOKSTRUCT) -> WindowsScanCode {
 }
 
 fn parse_virtual_key(key_struct: &KBDLLHOOKSTRUCT) -> Option<VirtualKey> {
-    key_struct.vkCode.try_into().ok().and_then(|vk:u8|VirtualKey::try_from(vk).ok())
+    key_struct
+        .vkCode
+        .try_into()
+        .ok()
+        .and_then(|vk: u8| VirtualKey::try_from(vk).ok())
 }
 
 fn parse_key_state(wparam: WPARAM) -> Option<KeyState> {
     match wparam.0 as u32 {
-        WM_KEYDOWN    => Some(KeyState::Pressed),
+        WM_KEYDOWN => Some(KeyState::Pressed),
         WM_SYSKEYDOWN => Some(KeyState::Pressed),
-        WM_KEYUP      => Some(KeyState::Released),
-        WM_SYSKEYUP   => Some(KeyState::Released),
+        WM_KEYUP => Some(KeyState::Released),
+        WM_SYSKEYUP => Some(KeyState::Released),
         _ => None
     }
 }

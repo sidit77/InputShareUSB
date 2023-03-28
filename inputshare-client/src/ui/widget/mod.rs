@@ -1,9 +1,9 @@
-pub mod theme;
 mod button;
 mod icons;
 mod list;
+pub mod theme;
 
-pub use theme::{Theme};
 pub use button::*;
 pub use icons::*;
 pub use list::*;
+pub use theme::Theme;

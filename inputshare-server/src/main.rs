@@ -1,5 +1,5 @@
-mod receiver;
 mod configfs;
+mod receiver;
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
@@ -11,17 +11,19 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+
 use crate::receiver::{InputEvent, InputReceiver};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::registry()
-        .with(Targets::new()
-            .with_default(LevelFilter::DEBUG)
-            .with_target("inputshare_server::configfs", LevelFilter::DEBUG)
-            .with_target("inputshare_server", LevelFilter::TRACE))
-        .with(layer()
-            .without_time())
+        .with(
+            Targets::new()
+                .with_default(LevelFilter::DEBUG)
+                .with_target("inputshare_server::configfs", LevelFilter::DEBUG)
+                .with_target("inputshare_server", LevelFilter::TRACE)
+        )
+        .with(layer().without_time())
         .try_init()?;
 
     let mut server_config = {
@@ -79,7 +81,8 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
             connection.send_datagram(Bytes::copy_from_slice(packet))?;
         }
         while let Some(event) = receiver.get_event() {
-            processor.send(event)
+            processor
+                .send(event)
                 .context("The input processor seems to be gone")?;
         }
     }
@@ -118,12 +121,15 @@ async fn configfs_input_processor() -> Result<UnboundedSender<InputEvent>> {
                 InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button).await,
                 InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount).await,
                 InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount).await,
-                InputEvent::Reset => async {
-                    keyboard.reset().await?;
-                    mouse.reset().await?;
-                    consumer_device.reset().await?;
-                    Ok(())
-                }.await,
+                InputEvent::Reset => {
+                    async {
+                        keyboard.reset().await?;
+                        mouse.reset().await?;
+                        consumer_device.reset().await?;
+                        Ok(())
+                    }
+                    .await
+                }
                 InputEvent::Shutdown => Ok(tracing::warn!("Shutdown is currently not supported!"))
             };
             if let Err(err) = result {

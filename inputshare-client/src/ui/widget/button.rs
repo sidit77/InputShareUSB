@@ -3,11 +3,10 @@ use druid::widget::{Click, ControllerHost};
 use druid::{theme, Data, LinearGradient, UnitPoint, WidgetPod};
 
 pub struct WidgetButton<T, W: Widget<T>> {
-    inner: WidgetPod<T, W>,
+    inner: WidgetPod<T, W>
 }
 
 impl<T: Data, W: Widget<T>> WidgetButton<T, W> {
-
     pub fn new(inner: W) -> Self {
         WidgetButton {
             inner: WidgetPod::new(inner)
@@ -34,7 +33,7 @@ impl<T: Data, W: Widget<T>> Widget<T> for WidgetButton<T, W> {
                 }
                 ctx.set_active(false);
             }
-            _ => (),
+            _ => ()
         }
     }
 
@@ -72,22 +71,19 @@ impl<T: Data, W: Widget<T>> Widget<T> for WidgetButton<T, W> {
             LinearGradient::new(
                 UnitPoint::TOP,
                 UnitPoint::BOTTOM,
-                (
-                    env.get(theme::DISABLED_BUTTON_LIGHT),
-                    env.get(theme::DISABLED_BUTTON_DARK),
-                ),
+                (env.get(theme::DISABLED_BUTTON_LIGHT), env.get(theme::DISABLED_BUTTON_DARK))
             )
         } else if is_active {
             LinearGradient::new(
                 UnitPoint::TOP,
                 UnitPoint::BOTTOM,
-                (env.get(theme::BUTTON_DARK), env.get(theme::BUTTON_LIGHT)),
+                (env.get(theme::BUTTON_DARK), env.get(theme::BUTTON_LIGHT))
             )
         } else {
             LinearGradient::new(
                 UnitPoint::TOP,
                 UnitPoint::BOTTOM,
-                (env.get(theme::BUTTON_LIGHT), env.get(theme::BUTTON_DARK)),
+                (env.get(theme::BUTTON_LIGHT), env.get(theme::BUTTON_DARK))
             )
         };
 
@@ -108,5 +104,4 @@ impl<T: Data, W: Widget<T>> Widget<T> for WidgetButton<T, W> {
             self.inner.paint(ctx, data, env);
         });
     }
-
 }

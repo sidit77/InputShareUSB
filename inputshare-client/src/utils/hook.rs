@@ -1,5 +1,6 @@
 use tokio::sync::mpsc::UnboundedSender;
-use yawi::{HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, send_inputs, VirtualKey};
+use yawi::{send_inputs, HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, VirtualKey};
+
 use crate::model::Config;
 use crate::utils::keyset::VirtualKeySet;
 
@@ -10,9 +11,11 @@ pub enum HookEvent {
 }
 
 pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> HookFn {
-    let send = move |event| sender
-        .send(event)
-        .unwrap_or_else(|err| tracing::warn!("Could not send event: {}", err));
+    let send = move |event| {
+        sender
+            .send(event)
+            .unwrap_or_else(|err| tracing::warn!("Could not send event: {}", err))
+    };
 
     let mut old_mouse_pos = yawi::get_cursor_pos();
 
@@ -25,7 +28,7 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
     let mut hotkey_pressed = false;
 
     send(HookEvent::Captured(captured));
-    HookFn::new(move |event|{
+    HookFn::new(move |event| {
         let key_event = event.to_key_event();
         if is_blacklisted(blacklist, key_event) {
             return HookAction::Continue;
@@ -34,7 +37,7 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
         let should_handle = is_repeated_event(&mut pressed_keys, key_event);
 
         if should_handle {
-            if let Some(KeyEvent{ key, state}) = key_event {
+            if let Some(KeyEvent { key, state }) = key_event {
                 if pressed_keys.is_superset(modifiers) && key == trigger && state == KeyState::Pressed {
                     hotkey_pressed = true;
                     if !captured {
@@ -58,9 +61,8 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
                 } else {
                     send(HookEvent::Input(event));
                 }
-
             } else if let InputEvent::MouseMoveEvent(x, y) = event {
-                old_mouse_pos = (x,y);
+                old_mouse_pos = (x, y);
             }
         }
 
@@ -81,25 +83,25 @@ fn is_repeated_event(pressed_keys: &mut VirtualKeySet, event: Option<KeyEvent>) 
             (false, KeyState::Pressed) => {
                 pressed_keys.insert(event.key);
                 true
-            },
+            }
             (true, KeyState::Released) => {
                 pressed_keys.remove(event.key);
                 true
-            },
+            }
             _ => false
-        }
+        },
         None => true
     }
 }
 
 fn try_release_all(keys: VirtualKeySet, trigger: VirtualKey) {
-    send_inputs(keys
-        .iter()
-        .filter(|k| *k != trigger)
-        .map(|k| match k.is_mouse_button() {
-            true => Input::MouseButtonInput(k, KeyState::Released),
-            false => Input::KeyboardKeyInput(k, KeyState::Released),
-        }))
-        .unwrap_or_else(|err| tracing::warn!("Could not send input events: {}", err));
+    send_inputs(
+        keys.iter()
+            .filter(|k| *k != trigger)
+            .map(|k| match k.is_mouse_button() {
+                true => Input::MouseButtonInput(k, KeyState::Released),
+                false => Input::KeyboardKeyInput(k, KeyState::Released)
+            })
+    )
+    .unwrap_or_else(|err| tracing::warn!("Could not send input events: {}", err));
 }
-

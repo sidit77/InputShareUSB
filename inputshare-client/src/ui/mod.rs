@@ -1,33 +1,28 @@
-use druid::{Color, Widget, WidgetExt};
 use druid::widget::{Button, CrossAxisAlignment, Flex, Label, Maybe, Scroll, TextBox};
-use yawi::VirtualKey;
-
+use druid::{Color, Widget, WidgetExt};
 use druid_material_icons::normal::action::SEARCH;
 use druid_material_icons::normal::content::ADD;
+use yawi::VirtualKey;
 
 use crate::model::{AppState, Config, ConnectionState, Hotkey};
-use crate::{initiate_connection, start_search};
 use crate::ui::actions::open_key_picker;
 use crate::ui::widget::{Icon, WidgetButton, WrappingList};
 use crate::utils::keyset::VirtualKeySet;
+use crate::{initiate_connection, start_search};
 
-pub mod widget;
 pub mod actions;
 pub mod popup;
+pub mod widget;
 
 pub fn ui() -> impl Widget<AppState> {
-    let popup = Maybe::or_empty(popup::ui)
-        .lens(AppState::popup);
-    druid::widget::ZStack::new(main_ui())
-        .with_centered_child(popup)
+    let popup = Maybe::or_empty(popup::ui).lens(AppState::popup);
+    druid::widget::ZStack::new(main_ui()).with_centered_child(popup)
 }
-
-
 
 fn main_ui() -> impl Widget<AppState> + 'static {
     let config = config_ui()
         .lens(AppState::config)
-        .disabled_if(|data, _|data.connection_state != ConnectionState::Disconnected);
+        .disabled_if(|data, _| data.connection_state != ConnectionState::Disconnected);
     Flex::column()
         .with_flex_child(config, 1.0)
         .with_spacer(5.0)
@@ -36,12 +31,9 @@ fn main_ui() -> impl Widget<AppState> + 'static {
 }
 
 fn config_ui() -> impl Widget<Config> + 'static {
-    let host = host_ui()
-        .lens(Config::host_address);
-    let blacklist = blacklist_ui()
-        .lens(Config::blacklist);
-    let hotkey = hotkey_ui()
-        .lens(Config::hotkey);
+    let host = host_ui().lens(Config::host_address);
+    let blacklist = blacklist_ui().lens(Config::blacklist);
+    let hotkey = hotkey_ui().lens(Config::hotkey);
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .with_child(host)
@@ -54,11 +46,8 @@ fn config_ui() -> impl Widget<Config> + 'static {
 }
 
 fn host_ui() -> impl Widget<String> + 'static {
-    let host = TextBox::new()
-        .expand_width();
-    let search = WidgetButton::new(Icon::from(SEARCH)
-        .padding(5.0))
-        .on_click(|ctx,_,_|start_search(ctx));
+    let host = TextBox::new().expand_width();
+    let search = WidgetButton::new(Icon::from(SEARCH).padding(5.0)).on_click(|ctx, _, _| start_search(ctx));
     Flex::row()
         .with_flex_child(host, 1.0)
         .with_spacer(5.0)
@@ -78,15 +67,15 @@ fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
         .horizontal()
         .with_spacing(2.0)
         .padding(2.0);
-    let modifiers = Scroll::new(list)
-        .horizontal()
-        .lens(Hotkey::modifiers);
+    let modifiers = Scroll::new(list).horizontal().lens(Hotkey::modifiers);
     let trigger = Button::dynamic(|data: &VirtualKey, _| data.to_string())
-        .on_click(|ctx, _, _| open_key_picker(ctx, |data, key| {
-            let hotkey = &mut data.config.hotkey;
-            hotkey.modifiers.remove(key);
-            hotkey.trigger = key;
-        }))
+        .on_click(|ctx, _, _| {
+            open_key_picker(ctx, |data, key| {
+                let hotkey = &mut data.config.hotkey;
+                hotkey.modifiers.remove(key);
+                hotkey.trigger = key;
+            })
+        })
         .lens(Hotkey::trigger);
     Flex::row()
         .with_child(modifiers)
@@ -122,8 +111,7 @@ fn add_button(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<()> + 'stati
 }
 
 fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
-    Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
-        .on_click(|_, (set, key), _| set.remove(*key))
+    Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string()).on_click(|_, (set, key), _| set.remove(*key))
 }
 
 fn status_ui() -> impl Widget<AppState> + 'static {

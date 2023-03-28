@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
+
 use druid::debug_state::DebugState;
 use druid::widget::{Axis, ListIter};
-use druid::{BoxConstraints, Data, Env, Event, EventCtx, KeyOrValue, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, Size, UpdateCtx, Widget, WidgetPod};
-
+use druid::{
+    BoxConstraints, Data, Env, Event, EventCtx, KeyOrValue, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, Size, UpdateCtx, Widget,
+    WidgetPod
+};
 use tracing::{instrument, trace};
-
 
 /// A list widget for a variable-size collection of items.
 pub struct WrappingList<T> {
@@ -13,7 +15,7 @@ pub struct WrappingList<T> {
     end: Option<WidgetPod<(), Box<dyn Widget<()>>>>,
     axis: Axis,
     spacing: KeyOrValue<f64>,
-    old_bc: BoxConstraints,
+    old_bc: BoxConstraints
 }
 
 impl<T: Data> WrappingList<T> {
@@ -26,7 +28,7 @@ impl<T: Data> WrappingList<T> {
             end: None,
             axis: Axis::Vertical,
             spacing: KeyOrValue::Concrete(0.),
-            old_bc: BoxConstraints::tight(Size::ZERO),
+            old_bc: BoxConstraints::tight(Size::ZERO)
         }
     }
 
@@ -73,12 +75,11 @@ impl<T: Data> WrappingList<T> {
                     self.children.push(child);
                 }
             }),
-            Ordering::Equal => (),
+            Ordering::Equal => ()
         }
         len != data.data_len()
     }
 }
-
 
 impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
     #[instrument(name = "WrappingList", level = "trace", skip(self, ctx, event, data, env))]
@@ -154,7 +155,6 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
         let mut children = self.children.iter_mut();
         let child_bc = constraints(axis, bc, 0., f64::INFINITY);
 
-
         let mut minor_offset = 0.0;
         data.for_each(|child_data, _| {
             let child = match children.next() {
@@ -183,7 +183,6 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
             major_pos += axis.major(child_size);
             major = major.max(major_pos);
             major_pos += spacing;
-
         });
 
         if let Some(end) = &mut self.end {
@@ -244,15 +243,9 @@ impl<C: Data, T: ListIter<C>> Widget<T> for WrappingList<C> {
     }
 }
 
-fn constraints(axis: Axis, bc: &BoxConstraints, min_major: f64, major: f64, ) -> BoxConstraints {
+fn constraints(axis: Axis, bc: &BoxConstraints, min_major: f64, major: f64) -> BoxConstraints {
     match axis {
-        Axis::Horizontal => BoxConstraints::new(
-            Size::new(min_major, bc.min().height),
-            Size::new(major, bc.max().height),
-        ),
-        Axis::Vertical => BoxConstraints::new(
-            Size::new(bc.min().width, min_major),
-            Size::new(bc.max().width, major),
-        ),
+        Axis::Horizontal => BoxConstraints::new(Size::new(min_major, bc.min().height), Size::new(major, bc.max().height)),
+        Axis::Vertical => BoxConstraints::new(Size::new(bc.min().width, min_major), Size::new(bc.max().width, major))
     }
 }

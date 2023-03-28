@@ -1,8 +1,10 @@
 use std::net::SocketAddr;
-use serde::{Serialize, Deserialize};
-use druid::{Data, Lens};
+
 use druid::im::Vector;
+use druid::{Data, Lens};
+use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
+
 use crate::utils::keyset::VirtualKeySet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
@@ -13,10 +15,12 @@ pub struct Hotkey {
 
 impl Hotkey {
     pub fn new<T: IntoIterator<Item = VirtualKey>>(modifiers: T, trigger: VirtualKey) -> Self {
-        Self { modifiers: VirtualKeySet::from_iter(modifiers), trigger}
+        Self {
+            modifiers: VirtualKeySet::from_iter(modifiers),
+            trigger
+        }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
 pub struct Config {
@@ -44,14 +48,15 @@ impl Default for Config {
             ]),
             show_network_info: false,
             network_send_rate: 100,
-            mouse_speed_factor: 1.0,
+            mouse_speed_factor: 1.0
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Data)]
 pub enum Side {
-    Local, Remote
+    Local,
+    Remote
 }
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Data)]
@@ -76,7 +81,7 @@ pub struct SearchResult {
 impl PopupType {
     pub fn search() -> impl Lens<PopupType, Vector<SearchResult>> {
         pub struct PopupLens;
-        impl Lens<PopupType, Vector<SearchResult>> for PopupLens{
+        impl Lens<PopupType, Vector<SearchResult>> for PopupLens {
             fn with<V, F: FnOnce(&Vector<SearchResult>) -> V>(&self, data: &PopupType, f: F) -> V {
                 match data {
                     PopupType::Searching(s) => f(s),
@@ -93,10 +98,7 @@ impl PopupType {
         }
         PopupLens
     }
-
 }
-
-
 
 #[derive(Default, Debug, Clone, Data, Lens)]
 pub struct AppState {

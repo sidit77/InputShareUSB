@@ -1,5 +1,5 @@
-use druid::{Color, Env, FontDescriptor, FontFamily, FontWeight, Insets, Key};
 use druid::theme::*;
+use druid::{Color, Env, FontDescriptor, FontFamily, FontWeight, Insets, Key};
 
 /*pub trait Theme {
     fn apply(env: &mut Env);
@@ -25,9 +25,9 @@ impl Theme for LightTheme {
 
 #[allow(dead_code)]
 pub enum Theme {
-    Light, Dark
+    Light,
+    Dark
 }
-
 
 pub fn grid(m: f64) -> f64 {
     GRID * m
@@ -67,11 +67,10 @@ pub const LINK_HOT_COLOR: Key<Color> = Key::new("app.link-hot-color");
 pub const LINK_ACTIVE_COLOR: Key<Color> = Key::new("app.link-active-color");
 pub const LINK_COLD_COLOR: Key<Color> = Key::new("app.link-cold-color");
 
-
 pub fn setup_theme(theme: Theme, env: &mut Env) {
     match theme {
         Theme::Light => setup_light_theme(env),
-        Theme::Dark => setup_dark_theme(env),
+        Theme::Dark => setup_dark_theme(env)
     };
 
     env.set(WINDOW_BACKGROUND_COLOR, env.get(GREY_500));
@@ -114,20 +113,14 @@ pub fn setup_theme(theme: Theme, env: &mut Env) {
     env.set(BUTTON_BORDER_RADIUS, 4.0);
     env.set(BUTTON_BORDER_WIDTH, 1.0);
 
-    env.set(
-        UI_FONT,
-        FontDescriptor::new(FontFamily::SYSTEM_UI).with_size(13.0),
-    );
+    env.set(UI_FONT, FontDescriptor::new(FontFamily::SYSTEM_UI).with_size(13.0));
     env.set(
         UI_FONT_MEDIUM,
         FontDescriptor::new(FontFamily::SYSTEM_UI)
             .with_size(13.0)
-            .with_weight(FontWeight::MEDIUM),
+            .with_weight(FontWeight::MEDIUM)
     );
-    env.set(
-        UI_FONT_MONO,
-        FontDescriptor::new(FontFamily::MONOSPACE).with_size(13.0),
-    );
+    env.set(UI_FONT_MONO, FontDescriptor::new(FontFamily::MONOSPACE).with_size(13.0));
     env.set(TEXT_SIZE_SMALL, 11.0);
     env.set(TEXT_SIZE_NORMAL, 13.0);
     env.set(TEXT_SIZE_LARGE, 16.0);
@@ -157,7 +150,6 @@ pub fn setup_theme(theme: Theme, env: &mut Env) {
     env.set(MENU_BUTTON_BG_INACTIVE, env.get(GREY_600));
     env.set(MENU_BUTTON_FG_ACTIVE, env.get(GREY_000));
     env.set(MENU_BUTTON_FG_INACTIVE, env.get(GREY_100));
-
 }
 
 fn setup_light_theme(env: &mut Env) {

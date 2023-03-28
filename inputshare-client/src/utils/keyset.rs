@@ -1,7 +1,8 @@
 use std::fmt::{Debug, Formatter};
-use druid::Data;
+
 use druid::im::HashSet;
 use druid::widget::ListIter;
+use druid::Data;
 use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
 
@@ -12,9 +13,7 @@ pub struct VirtualKeySet {
 
 impl VirtualKeySet {
     pub fn new() -> Self {
-        Self {
-            keys: [0; 4],
-        }
+        Self { keys: [0; 4] }
     }
 
     #[inline]
@@ -44,27 +43,21 @@ impl VirtualKeySet {
         self.keys
             .iter()
             .zip(other.keys.iter())
-            .all(|(set, sub)| {
-                set & sub == *sub
-            })
+            .all(|(set, sub)| set & sub == *sub)
     }
 
     pub fn iter(self) -> impl Iterator<Item = VirtualKey> {
-        (0..4)
-            .into_iter()
-            .flat_map(move |index|(0..64)
+        (0..4).into_iter().flat_map(move |index| {
+            (0..64)
                 .into_iter()
                 .filter(move |i| self.keys[index] & (1 << i) != 0)
-                .filter_map(move |i| VirtualKey::try_from(((index << 6) | i) as u8).ok()))
+                .filter_map(move |i| VirtualKey::try_from(((index << 6) | i) as u8).ok())
+        })
     }
 
     pub fn len(self) -> usize {
-        self.keys
-            .iter()
-            .map(|i| i.count_ones() as usize)
-            .sum()
+        self.keys.iter().map(|i| i.count_ones() as usize).sum()
     }
-
 }
 
 impl Debug for VirtualKeySet {
@@ -74,7 +67,7 @@ impl Debug for VirtualKeySet {
 }
 
 impl FromIterator<VirtualKey> for VirtualKeySet {
-    fn from_iter<T: IntoIterator<Item=VirtualKey>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = VirtualKey>>(iter: T) -> Self {
         let mut result = VirtualKeySet::new();
         for key in iter {
             result.insert(key);

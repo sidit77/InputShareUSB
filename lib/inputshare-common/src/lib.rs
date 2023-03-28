@@ -1,15 +1,22 @@
 use std::fmt::Debug;
+
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-pub const IDENTIFIER: &str = concat!(env!("CARGO_CRATE_NAME"), "_" ,env!("CARGO_PKG_VERSION"));
+pub const IDENTIFIER: &str = concat!(env!("CARGO_CRATE_NAME"), "_", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Vec2<T> where T: Debug + Copy + PartialEq {
+pub struct Vec2<T>
+where
+    T: Debug + Copy + PartialEq
+{
     pub x: T,
     pub y: T
 }
 
-impl<T> Vec2<T> where T: Debug + Copy + PartialEq {
+impl<T> Vec2<T>
+where
+    T: Debug + Copy + PartialEq
+{
     pub fn new(x: T, y: T) -> Self {
         Self { x, y }
     }
@@ -141,15 +148,15 @@ pub enum HidKeyCode {
     Slash = 0x38,
     Capslock = 0x39,
 
-    F1 	= 0x3a,
-    F2 	= 0x3b,
-    F3 	= 0x3c,
-    F4 	= 0x3d,
-    F5 	= 0x3e,
-    F6 	= 0x3f,
-    F7 	= 0x40,
-    F8 	= 0x41,
-    F9 	= 0x42,
+    F1 = 0x3a,
+    F2 = 0x3b,
+    F3 = 0x3c,
+    F4 = 0x3d,
+    F5 = 0x3e,
+    F6 = 0x3f,
+    F7 = 0x40,
+    F8 = 0x41,
+    F9 = 0x42,
     F10 = 0x43,
     F11 = 0x44,
     F12 = 0x45,
@@ -234,7 +241,7 @@ pub enum HidKeyCode {
     International7 = 0x8d,
     International8 = 0x8e,
     International9 = 0x8f,
-    Language1  = 0x90,
+    Language1 = 0x90,
     Language2 = 0x91,
     Language3 = 0x92,
     Language4 = 0x93,
@@ -258,7 +265,6 @@ pub enum HidKeyCode {
     ExSel = 0xa4,
 
     // According to QMK, 0xA5-0xDF are not usable on modern keyboards
-
     LeftCtrl = 0xe0,
     LeftShift = 0xe1,
     LeftAlt = 0xe2,
@@ -266,8 +272,5 @@ pub enum HidKeyCode {
     RightCtrl = 0xe4,
     RightShift = 0xe5,
     RightAlt = 0xe6,
-    RightMeta = 0xe7,
-
+    RightMeta = 0xe7
 }
-
-

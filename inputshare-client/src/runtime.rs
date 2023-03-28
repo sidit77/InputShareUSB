@@ -1,8 +1,10 @@
 use std::cell::Cell;
+
 use druid::{AppDelegate, Command, DelegateCtx, Env, EventCtx, ExtEventSink, Handled, Selector, Target};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
 use yawi::InputHook;
+
 use crate::model::AppState;
 
 type CallbackFunc = Cell<Option<Box<dyn FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static>>>;
@@ -33,7 +35,6 @@ pub struct RuntimeDelegate {
 }
 
 impl RuntimeDelegate {
-
     pub fn new() -> Self {
         Self {
             hook: None,
@@ -42,21 +43,20 @@ impl RuntimeDelegate {
                 .worker_threads(1)
                 .build()
                 .expect("Could not start async runtime"),
-            mdns: None,
+            mdns: None
         }
     }
-
 }
 
 impl AppDelegate<AppState> for RuntimeDelegate {
     fn command(&mut self, _: &mut DelegateCtx, _target: Target, cmd: &Command, data: &mut AppState, _env: &Env) -> Handled {
         match cmd.get(CALLBACK) {
-            Some(callback) =>  {
+            Some(callback) => {
                 if let Some(callback) = callback.take() {
                     callback(self, data);
                 }
                 Handled::Yes
-            },
+            }
             None => Handled::No
         }
     }
