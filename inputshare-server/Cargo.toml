@@ -17,6 +17,8 @@ rcgen = "0.10"
 byteorder = "1"
 bytes = "1"
 bitflags = "2"
+clap = { version = "4.1", features = ["derive"] }
+inputshare-common = { path = "../lib/inputshare-common" }
 
 # log = "0.4"
 # env_logger = "0.10"
@@ -28,5 +30,5 @@ bitflags = "2"
 # bitflags = "1.3"
 # clap = { version = "4.1", features = ["derive"] }
 # system_shutdown = "4.0"
-inputshare-common = { path = "../lib/inputshare-common" }
+
 # udp_connections = {git = "https://github.com/sidit77/udp_connections.git"}
