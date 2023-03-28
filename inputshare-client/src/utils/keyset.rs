@@ -47,9 +47,8 @@ impl VirtualKeySet {
     }
 
     pub fn iter(self) -> impl Iterator<Item = VirtualKey> {
-        (0..4).into_iter().flat_map(move |index| {
+        (0..4).flat_map(move |index| {
             (0..64)
-                .into_iter()
                 .filter(move |i| self.keys[index] & (1 << i) != 0)
                 .filter_map(move |i| VirtualKey::try_from(((index << 6) | i) as u8).ok())
         })

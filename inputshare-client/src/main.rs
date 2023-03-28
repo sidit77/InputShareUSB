@@ -10,8 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use druid::im::Vector;
-use druid::{AppLauncher, EventCtx, ExtEventSink, WindowDesc};
+use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use searchlight::discovery::{Discovery, DiscoveryEvent};
 use searchlight::net::IpVersion;
@@ -23,7 +22,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yawi::InputHook;
 
-use crate::model::{AppState, ConnectionState, PopupType, SearchResult};
+use crate::model::{AppState, PopupType, SearchResult};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::widget::{theme, Theme};
@@ -55,23 +54,6 @@ pub fn main() {
         .expect("launch failed");
 }
 
-fn start_search(ctx: &mut EventCtx) {
-    let handle = ctx.get_external_handle();
-    ctx.add_rt_callback(move |rt, data| {
-        let task = rt.runtime.spawn(async move {
-            if let Err(err) = search(handle.clone()).await {
-                tracing::error!("mdns search failed: {}", err);
-                handle.add_rt_callback(|rt, data| {
-                    rt.mdns = None;
-                    data.popup = None;
-                });
-            }
-        });
-        rt.mdns = Some(task);
-        data.popup = Some(PopupType::Searching(Vector::new()))
-    })
-}
-
 async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
     Discovery::builder()
         .service("_http._tcp.local.")?
@@ -91,25 +73,6 @@ async fn search(ctx: ExtEventSink) -> anyhow::Result<()> {
         })
         .await?;
     Ok(())
-}
-
-fn initiate_connection(ctx: &mut EventCtx) {
-    let handle = ctx.get_external_handle();
-    ctx.add_rt_callback(move |rt, data| {
-        rt.hook = None;
-        if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected {
-            data.connection_state = ConnectionState::Connecting;
-            rt.runtime.spawn(async move {
-                connection(&handle)
-                    .await
-                    .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
-                handle.add_rt_callback(|rt, data| {
-                    rt.hook = None;
-                    data.connection_state = ConnectionState::Disconnected;
-                });
-            });
-        }
-    })
 }
 
 async fn connection(sink: &ExtEventSink) -> anyhow::Result<()> {

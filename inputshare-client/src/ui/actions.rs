@@ -1,10 +1,48 @@
 use std::cell::Cell;
 
 use druid::EventCtx;
+use druid::im::Vector;
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
 use crate::model::{AppState, ConnectionState, PopupType};
 use crate::runtime::ExtEventSinkCallback;
+use crate::{connection, search};
+
+pub fn initiate_connection(ctx: &mut EventCtx) {
+    let handle = ctx.get_external_handle();
+    ctx.add_rt_callback(move |rt, data| {
+        rt.hook = None;
+        if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected {
+            data.connection_state = ConnectionState::Connecting;
+            rt.runtime.spawn(async move {
+                connection(&handle)
+                    .await
+                    .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
+                handle.add_rt_callback(|rt, data| {
+                    rt.hook = None;
+                    data.connection_state = ConnectionState::Disconnected;
+                });
+            });
+        }
+    })
+}
+
+pub fn start_search(ctx: &mut EventCtx) {
+    let handle = ctx.get_external_handle();
+    ctx.add_rt_callback(move |rt, data| {
+        let task = rt.runtime.spawn(async move {
+            if let Err(err) = search(handle.clone()).await {
+                tracing::error!("mdns search failed: {}", err);
+                handle.add_rt_callback(|rt, data| {
+                    rt.mdns = None;
+                    data.popup = None;
+                });
+            }
+        });
+        rt.mdns = Some(task);
+        data.popup = Some(PopupType::Searching(Vector::new()))
+    })
+}
 
 pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, VirtualKey) + Send + 'static) {
     let handle = ctx.get_external_handle();

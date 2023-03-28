@@ -78,28 +78,6 @@ pub struct SearchResult {
     pub addrs: SocketAddr
 }
 
-impl PopupType {
-    pub fn search() -> impl Lens<PopupType, Vector<SearchResult>> {
-        pub struct PopupLens;
-        impl Lens<PopupType, Vector<SearchResult>> for PopupLens {
-            fn with<V, F: FnOnce(&Vector<SearchResult>) -> V>(&self, data: &PopupType, f: F) -> V {
-                match data {
-                    PopupType::Searching(s) => f(s),
-                    _ => unreachable!()
-                }
-            }
-
-            fn with_mut<V, F: FnOnce(&mut Vector<SearchResult>) -> V>(&self, data: &mut PopupType, f: F) -> V {
-                match data {
-                    PopupType::Searching(s) => f(s),
-                    _ => unreachable!()
-                }
-            }
-        }
-        PopupLens
-    }
-}
-
 #[derive(Default, Debug, Clone, Data, Lens)]
 pub struct AppState {
     pub config: Config,
