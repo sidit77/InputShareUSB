@@ -1,8 +1,8 @@
 use std::mem::Discriminant;
 
+use druid::im::Vector;
 use druid::widget::{BackgroundBrush, Button, Flex, Label, List, ViewSwitcher};
 use druid::{Color, Lens, LensExt, Widget, WidgetExt};
-use druid::im::Vector;
 
 use crate::model::{PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;

@@ -1,14 +1,14 @@
 use std::cell::Cell;
 use std::net::{IpAddr, SocketAddr};
 
-use druid::{EventCtx, ExtEventSink};
 use druid::im::Vector;
+use druid::{EventCtx, ExtEventSink};
 use mdns_sd::{Receiver, ServiceDaemon, ServiceEvent};
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
+use crate::connection;
 use crate::model::{AppState, ConnectionState, PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
-use crate::{connection};
 
 pub fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
@@ -59,9 +59,7 @@ async fn update_popup(receiver: Receiver<ServiceEvent>, ctx: ExtEventSink) {
                 if let Some(PopupType::Searching(list)) = &mut data.popup {
                     for addrs in info.get_addresses() {
                         let addrs = SocketAddr::new(IpAddr::V4(*addrs), info.get_port());
-                        list.push_back(SearchResult {
-                            addrs,
-                        });
+                        list.push_back(SearchResult { addrs });
                     }
                 }
             });

@@ -9,8 +9,8 @@ mod utils;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::Context;
 
+use anyhow::Context;
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
@@ -114,7 +114,8 @@ async fn connect(host: &str) -> anyhow::Result<Connection> {
     let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
     endpoint.set_default_client_config(config);
 
-    let addrs = host.to_socket_addrs()?
+    let addrs = host
+        .to_socket_addrs()?
         .find(|a| a.is_ipv4())
         .context("Could not resolve host")?;
     tracing::debug!("Resolved {} to {}", host, addrs);

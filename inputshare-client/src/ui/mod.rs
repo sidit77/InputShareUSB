@@ -5,7 +5,7 @@ use druid_material_icons::normal::content::ADD;
 use yawi::VirtualKey;
 
 use crate::model::{AppState, Config, ConnectionState, Hotkey};
-use crate::ui::actions::{initiate_connection, start_search, open_key_picker};
+use crate::ui::actions::{initiate_connection, open_key_picker, start_search};
 use crate::ui::widget::{Icon, WidgetButton, WrappingList};
 use crate::utils::keyset::VirtualKeySet;
 

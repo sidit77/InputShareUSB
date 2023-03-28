@@ -2,9 +2,10 @@ mod configfs;
 mod receiver;
 
 use std::time::Duration;
+
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use clap::{Parser, command, arg};
+use clap::{arg, command, Parser};
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 use quinn::{Connecting, ConnectionError, Endpoint, ServerConfig};
 use tokio::select;
@@ -74,8 +75,9 @@ async fn main() -> Result<()> {
             "inputshare.local.",
             "",
             interface.port(),
-            &properties[..],
-        )?.enable_addr_auto();
+            &properties[..]
+        )?
+        .enable_addr_auto();
         mdns.register(service_info)?;
         let monitor = mdns.monitor()?;
         tokio::spawn(async move {
@@ -102,12 +104,9 @@ async fn main() -> Result<()> {
 #[cfg(unix)]
 async fn quit() {
     use tokio::signal::unix::*;
-    let mut quit = signal(SignalKind::quit())
-        .expect("Could not register signal");
-    let mut interrupt = signal(SignalKind::interrupt())
-        .expect("Could not register signal");
-    let mut terminate = signal(SignalKind::terminate())
-        .expect("Could not register signal");
+    let mut quit = signal(SignalKind::quit()).expect("Could not register signal");
+    let mut interrupt = signal(SignalKind::interrupt()).expect("Could not register signal");
+    let mut terminate = signal(SignalKind::terminate()).expect("Could not register signal");
     select! {
         _ = quit.recv() => { }
         _ = interrupt.recv() => { }
