@@ -987,6 +987,7 @@ dependencies = [
  "error-tools",
  "inputshare-common",
  "mdns-sd",
+ "parking_lot",
  "quinn",
  "ron",
  "rustls",

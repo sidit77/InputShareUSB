@@ -15,8 +15,7 @@ error-tools = { git = "https://github.com/sidit77/error-tools.git", features = [
 
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
-# futures-lite = "1"
-# futures-util = "0.3"
+parking_lot = "0.12"
 quinn = "0.9"
 rustls = { version = "0.20", default-features = false, features = ["quic", "dangerous_configuration"] }
 mdns-sd = "0.7"

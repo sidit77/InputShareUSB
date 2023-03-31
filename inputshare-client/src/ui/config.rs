@@ -1,9 +1,11 @@
+use std::sync::{Arc};
 use std::time::Duration;
 
 use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, TextBox};
 use druid::{Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, TimerToken, UpdateCtx, Widget, WidgetExt};
 use druid_material_icons::normal::action::SEARCH;
 use druid_material_icons::normal::content::ADD;
+use parking_lot::Mutex;
 use yawi::VirtualKey;
 
 use crate::model::{AppState, Config, Hotkey};
@@ -106,11 +108,12 @@ fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
         .on_click(|_, (set, key), _| set.remove(*key))
 }
 
-const CONFIG_SAVE_DELAY: Duration = Duration::from_secs(10);
+const CONFIG_SAVE_DELAY: Duration = Duration::from_secs(1);
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 struct SaveController {
-    last_timer: Option<TimerToken>
+    last_timer: Option<TimerToken>,
+    saved_state: Arc<Mutex<Option<Config>>>
 }
 
 impl<W: Widget<Config>> Controller<Config, W> for SaveController {
@@ -122,13 +125,25 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
         };
         if save {
             self.last_timer.take();
-            let config = data.clone();
-            ctx.add_rt_callback(move |rt, _| {
-                rt.runtime.spawn_blocking(move || match config.save() {
-                    Ok(_) => tracing::trace!("Successfully saved config"),
-                    Err(err) => tracing::warn!("Failed to save config: {}", err)
+            let changed =  self.saved_state
+                .lock()
+                .as_ref()
+                .map_or(false, |saved| !saved.same(data));
+            if changed {
+                let config = data.clone();
+                let saved = self.saved_state.clone();
+                ctx.add_rt_callback(move |rt, _| {
+                    rt.runtime.spawn_blocking(move || match config.save() {
+                        Ok(_) => {
+                            *saved.lock() = Some(config);
+                            tracing::trace!("Successfully saved config");
+                        },
+                        Err(err) => tracing::warn!("Failed to save config: {}", err)
+                    });
                 });
-            })
+            } else {
+                tracing::trace!("Config appears to be identical to the version stored on disk");
+            }
         }
         child.event(ctx, event, data, env)
     }
@@ -136,11 +151,13 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
     fn lifecycle(&mut self, child: &mut W, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &Config, env: &Env) {
         if let LifeCycle::WidgetAdded = event {
             let handle = ctx.get_external_handle();
+            let saved = self.saved_state.clone();
             handle.clone().add_rt_callback(move |rt, _| {
                 rt.runtime.spawn_blocking(move || match Config::load() {
                     Ok(config) => handle.add_idle_callback(move |data: &mut AppState| {
                         tracing::trace!("Successfully loaded config");
-                        data.config = config;
+                        data.config = config.clone();
+                        *saved.lock() = Some(config);
                     }),
                     Err(err) => tracing::warn!("Failed to load config: {}", err)
                 });
