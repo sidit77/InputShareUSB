@@ -1,6 +1,7 @@
 mod configfs;
 mod receiver;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -68,14 +69,13 @@ async fn main() -> Result<()> {
 
     let mdns = ServiceDaemon::new()?;
     {
-        let properties = vec![("PATH", "one"), ("Path", "two"), ("PaTh", "three")];
         let service_info = ServiceInfo::new(
             "_inputshare._udp.local.",
             "InputShare Server",
             "inputshare.local.",
             "",
             interface.port(),
-            &properties[..]
+            HashMap::new()
         )?
         .enable_addr_auto();
         mdns.register(service_info)?;
