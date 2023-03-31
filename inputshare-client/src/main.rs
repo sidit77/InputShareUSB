@@ -45,7 +45,7 @@ pub fn main() {
     error_tools::gui::set_gui_panic_hook();
 
     let window = WindowDesc::new(ui::ui())
-        .window_size((450.0, 300.0))
+        .window_size((400.0, 400.0))
         .title("InputShare Client");
 
     AppLauncher::with_window(window)

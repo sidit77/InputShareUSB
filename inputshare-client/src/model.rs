@@ -33,7 +33,7 @@ pub struct Config {
     pub blacklist: VirtualKeySet,
     pub show_network_info: bool,
     pub network_send_rate: u32,
-    pub mouse_speed_factor: f32
+    pub mouse_speed_factor: f64
 }
 
 impl Default for Config {

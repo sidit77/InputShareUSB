@@ -1,8 +1,9 @@
 use std::sync::{Arc};
 use std::time::Duration;
 
-use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, TextBox};
-use druid::{Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, TimerToken, UpdateCtx, Widget, WidgetExt};
+use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, Stepper, Switch, TextBox, ValueTextBox};
+use druid::{Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, theme, TimerToken, UpdateCtx, Widget, WidgetExt};
+use druid::text::ParseFormatter;
 use druid_material_icons::normal::action::SEARCH;
 use druid_material_icons::normal::content::ADD;
 use parking_lot::Mutex;
@@ -17,6 +18,18 @@ use crate::utils::keyset::VirtualKeySet;
 pub fn ui() -> impl Widget<Config> + 'static {
     let host = host_ui()
         .lens(Config::host_address);
+    let speed = speed_ui()
+        .lens(Config::mouse_speed_factor);
+    let network = network_ui()
+        .lens(Config::show_network_info);
+    let small_options = Flex::row()
+        .with_child(Flex::column()
+            .with_child(Label::new("Mouse Speed"))
+            .with_child(speed))
+        .with_default_spacer()
+        .with_child(Flex::column()
+            .with_child(Label::new("Network Info"))
+            .with_child(network));
     let blacklist = blacklist_ui()
         .lens(Config::blacklist);
     let hotkey = hotkey_ui()
@@ -25,6 +38,8 @@ pub fn ui() -> impl Widget<Config> + 'static {
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .with_child(Label::new("Host"))
         .with_child(host)
+        .with_default_spacer()
+        .with_child(small_options)
         .with_default_spacer()
         .with_child(Label::new("Hotkey"))
         .with_child(hotkey)
@@ -43,6 +58,29 @@ fn host_ui() -> impl Widget<String> + 'static {
         .with_flex_child(host, 1.0)
         .with_spacer(5.0)
         .with_child(search)
+}
+
+fn speed_ui() -> impl Widget<f64> + 'static {
+    let formatter = ParseFormatter::with_format_fn(|v|format!("{:.02}", v));
+    let text_field = TextBox::new();
+    let stepper = Stepper::new()
+        .with_step(0.25);
+    Flex::row()
+        .with_flex_child(ValueTextBox::new(text_field, formatter), 1.0)
+        .with_child(stepper)
+        .fix_width(85.0)
+}
+
+fn network_ui() -> impl Widget<bool> + 'static {
+    Switch::new()
+        .env_scope(|env, _| {
+            env.set(theme::FOREGROUND_LIGHT, env.get(theme::BACKGROUND_LIGHT));
+            env.set(theme::FOREGROUND_DARK, env.get(theme::BORDER_DARK));
+            env.set(theme::DISABLED_FOREGROUND_LIGHT, env.get(theme::BACKGROUND_LIGHT));
+            env.set(theme::DISABLED_FOREGROUND_DARK, env.get(theme::BACKGROUND_DARK));
+            env.set(theme::PRIMARY_LIGHT, env.get(theme::BACKGROUND_LIGHT));
+            env.set(theme::PRIMARY_DARK, env.get(theme::BACKGROUND_DARK));
+        })
 }
 
 fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
@@ -120,7 +158,7 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
     fn event(&mut self, child: &mut W, ctx: &mut EventCtx, event: &Event, data: &mut Config, env: &Env) {
         let save = match event {
             Event::Timer(token) => Some(*token) == self.last_timer,
-            Event::WindowCloseRequested => self.last_timer.is_some(),
+            Event::WindowCloseRequested => true,
             _ => false
         };
         if save {
