@@ -3,11 +3,11 @@ use druid::{Widget, WidgetExt};
 
 use crate::model::{AppState, ConnectionState};
 
-pub mod widget;
 mod actions;
+mod config;
 mod popup;
 mod status;
-mod config;
+pub mod widget;
 
 pub fn ui() -> impl Widget<AppState> {
     let popup = Maybe::or_empty(popup::ui)
@@ -23,5 +23,3 @@ pub fn ui() -> impl Widget<AppState> {
     druid::widget::ZStack::new(main)
         .with_centered_child(popup)
 }
-
-

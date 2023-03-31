@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
+
 use anyhow::Context;
 use directories::BaseDirs;
-
 use druid::im::Vector;
 use druid::{Data, Lens};
-use ron::ser::{PrettyConfig, to_string_pretty};
+use ron::ser::{to_string_pretty, PrettyConfig};
 use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
 
@@ -71,7 +71,7 @@ impl Config {
             true => {
                 let file = std::fs::read_to_string(path)?;
                 ron::from_str(&file)?
-            },
+            }
             false => {
                 let conf = Self::default();
                 conf.save()?;
@@ -85,7 +85,6 @@ impl Config {
         let pretty = PrettyConfig::new();
         Ok(std::fs::write(Self::path()?, to_string_pretty(self, pretty)?)?)
     }
-
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Data)]

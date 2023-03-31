@@ -1,4 +1,5 @@
 use std::time::Duration;
+
 use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, TextBox};
 use druid::{Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, TimerToken, UpdateCtx, Widget, WidgetExt};
 use druid_material_icons::normal::action::SEARCH;
@@ -123,11 +124,9 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
             self.last_timer.take();
             let config = data.clone();
             ctx.add_rt_callback(move |rt, _| {
-                rt.runtime.spawn_blocking(move || {
-                    match config.save() {
-                        Ok(_) => tracing::trace!("Successfully saved config"),
-                        Err(err) => tracing::warn!("Failed to save config: {}", err)
-                    }
+                rt.runtime.spawn_blocking(move || match config.save() {
+                    Ok(_) => tracing::trace!("Successfully saved config"),
+                    Err(err) => tracing::warn!("Failed to save config: {}", err)
                 });
             })
         }
@@ -138,14 +137,12 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
         if let LifeCycle::WidgetAdded = event {
             let handle = ctx.get_external_handle();
             handle.clone().add_rt_callback(move |rt, _| {
-                rt.runtime.spawn_blocking(move || {
-                    match Config::load() {
-                        Ok(config) => handle.add_idle_callback(move |data: &mut AppState| {
-                            tracing::trace!("Successfully loaded config");
-                            data.config = config;
-                        }),
-                        Err(err) => tracing::warn!("Failed to load config: {}", err)
-                    }
+                rt.runtime.spawn_blocking(move || match Config::load() {
+                    Ok(config) => handle.add_idle_callback(move |data: &mut AppState| {
+                        tracing::trace!("Successfully loaded config");
+                        data.config = config;
+                    }),
+                    Err(err) => tracing::warn!("Failed to load config: {}", err)
                 });
             });
         }
