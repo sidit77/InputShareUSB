@@ -1,19 +1,18 @@
+use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 
-use druid::im::HashSet;
 use druid::widget::ListIter;
 use druid::Data;
 use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
 
-#[derive(Copy, Clone, Eq, PartialEq, Data, Serialize, Deserialize)]
-pub struct VirtualKeySet {
-    keys: [u64; 4]
-}
+#[derive(Default, Copy, Clone, Eq, PartialEq, Data, Serialize, Deserialize)]
+#[serde(from = "HashSet<VirtualKey>", into = "HashSet<VirtualKey>")]
+pub struct VirtualKeySet([u64; 4]);
 
 impl VirtualKeySet {
     pub fn new() -> Self {
-        Self { keys: [0; 4] }
+        Self([0; 4])
     }
 
     #[inline]
@@ -26,36 +25,36 @@ impl VirtualKeySet {
 
     pub fn insert(&mut self, key: VirtualKey) {
         let (index, mask) = Self::index(key);
-        self.keys[index] |= mask;
+        self.0[index] |= mask;
     }
 
     pub fn remove(&mut self, key: VirtualKey) {
         let (index, mask) = Self::index(key);
-        self.keys[index] &= !mask;
+        self.0[index] &= !mask;
     }
 
     pub fn contains(self, key: VirtualKey) -> bool {
         let (index, mask) = Self::index(key);
-        self.keys[index] & mask != 0
+        self.0[index] & mask != 0
     }
 
     pub fn is_superset(self, other: VirtualKeySet) -> bool {
-        self.keys
+        self.0
             .iter()
-            .zip(other.keys.iter())
+            .zip(other.0.iter())
             .all(|(set, sub)| set & sub == *sub)
     }
 
     pub fn iter(self) -> impl Iterator<Item = VirtualKey> {
         (0..4).flat_map(move |index| {
             (0..64)
-                .filter(move |i| self.keys[index] & (1 << i) != 0)
+                .filter(move |i| self.0[index] & (1 << i) != 0)
                 .filter_map(move |i| VirtualKey::try_from(((index << 6) | i) as u8).ok())
         })
     }
 
     pub fn len(self) -> usize {
-        self.keys.iter().map(|i| i.count_ones() as usize).sum()
+        self.0.iter().map(|i| i.count_ones() as usize).sum()
     }
 }
 
@@ -75,13 +74,15 @@ impl FromIterator<VirtualKey> for VirtualKeySet {
     }
 }
 
-impl From<&HashSet<VirtualKey>> for VirtualKeySet {
-    fn from(value: &HashSet<VirtualKey>) -> Self {
-        let mut result = VirtualKeySet::new();
-        for key in value {
-            result.insert(*key);
-        }
-        result
+impl From<HashSet<VirtualKey>> for VirtualKeySet {
+    fn from(value: HashSet<VirtualKey>) -> Self {
+        VirtualKeySet::from_iter(value)
+    }
+}
+
+impl From<VirtualKeySet> for HashSet<VirtualKey> {
+    fn from(value: VirtualKeySet) -> Self {
+        HashSet::from_iter(value.iter())
     }
 }
 
