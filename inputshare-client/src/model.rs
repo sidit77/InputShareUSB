@@ -1,7 +1,11 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use anyhow::Context;
+use directories::BaseDirs;
 
 use druid::im::Vector;
 use druid::{Data, Lens};
+use ron::ser::{PrettyConfig, to_string_pretty};
 use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
 
@@ -51,6 +55,37 @@ impl Default for Config {
             mouse_speed_factor: 1.0
         }
     }
+}
+
+impl Config {
+    pub fn path() -> anyhow::Result<PathBuf> {
+        let dirs = BaseDirs::new()
+            .context("Can not get base dirs")?;
+        let config_dir = dirs.config_dir();
+        Ok(config_dir.join("InputShare.ron"))
+    }
+
+    pub fn load() -> anyhow::Result<Self> {
+        let path = Self::path()?;
+        let config: Self = match path.exists() {
+            true => {
+                let file = std::fs::read_to_string(path)?;
+                ron::from_str(&file)?
+            },
+            false => {
+                let conf = Self::default();
+                conf.save()?;
+                conf
+            }
+        };
+        Ok(config)
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        let pretty = PrettyConfig::new();
+        Ok(std::fs::write(Self::path()?, to_string_pretty(self, pretty)?)?)
+    }
+
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Data)]

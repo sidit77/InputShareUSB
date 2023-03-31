@@ -88,6 +88,7 @@ async fn connection(sink: &ExtEventSink, host: &str) -> anyhow::Result<()> {
                 debug_assert!(msg.len() <= connection.max_datagram_size().unwrap());
                 connection.send_datagram(Bytes::copy_from_slice(msg))?;
                 deadline = Some(Instant::now() + Duration::from_millis(10));
+                //tracing::debug!("stats: {:#?}", connection.stats().path);
             }
         };
         deadline = match sender.in_sync() {
