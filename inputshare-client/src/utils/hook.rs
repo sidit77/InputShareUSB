@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use tokio::sync::mpsc::UnboundedSender;
 use yawi::{send_inputs, HookAction, HookFn, Input, InputEvent, KeyEvent, KeyState, VirtualKey};
 
@@ -9,6 +11,8 @@ pub enum HookEvent {
     Captured(bool),
     Input(InputEvent)
 }
+
+const CAPTURE_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> HookFn {
     let send = move |event| {
@@ -27,6 +31,8 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
     let mut pressed_keys = VirtualKeySet::new();
     let mut hotkey_pressed = false;
 
+    let mut last_swap = Instant::now();
+
     send(HookEvent::Captured(captured));
     HookFn::new(move |event| {
         let key_event = event.to_key_event();
@@ -40,11 +46,14 @@ pub fn create_callback(config: &Config, sender: UnboundedSender<HookEvent>) -> H
             if let Some(KeyEvent { key, state }) = key_event {
                 if pressed_keys.is_superset(modifiers) && key == trigger && state == KeyState::Pressed {
                     hotkey_pressed = true;
-                    if !captured {
-                        try_release_all(pressed_keys, trigger);
+                    if last_swap.elapsed() >= CAPTURE_TIMEOUT {
+                        if !captured {
+                            try_release_all(pressed_keys, trigger);
+                        }
+                        captured = !captured;
+                        last_swap = Instant::now();
+                        send(HookEvent::Captured(captured));
                     }
-                    captured = !captured;
-                    send(HookEvent::Captured(captured));
                     return HookAction::Block;
                 }
                 if hotkey_pressed && key == trigger && state == KeyState::Released {
