@@ -44,9 +44,10 @@ impl InputSender {
         }
     }
 
-    //pub fn shutdown_remote(&mut self) {
-    //    self.message_queue.push_back([MessageType::Shutdown.into(), 0])
-    //}
+    pub fn shutdown_remote(&mut self) {
+        self.message_queue
+            .push_back([MessageType::Shutdown.into(), 0])
+    }
 
     pub fn reset(&mut self) {
         self.message_queue.push_back([MessageType::Reset.into(), 0])

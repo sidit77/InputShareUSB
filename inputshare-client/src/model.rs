@@ -11,6 +11,12 @@ use yawi::VirtualKey;
 
 use crate::utils::keyset::VirtualKeySet;
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ConnectionCommand {
+    ShutdownServer,
+    Disconnect
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Data, Lens)]
 pub struct Hotkey {
     pub modifiers: VirtualKeySet,
@@ -59,8 +65,7 @@ impl Default for Config {
 
 impl Config {
     pub fn path() -> anyhow::Result<PathBuf> {
-        let dirs = BaseDirs::new()
-            .context("Can not get base dirs")?;
+        let dirs = BaseDirs::new().context("Can not get base dirs")?;
         let config_dir = dirs.config_dir();
         Ok(config_dir.join("InputShare.ron"))
     }

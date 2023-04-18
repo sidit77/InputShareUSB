@@ -1,9 +1,9 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::time::Duration;
 
-use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, Stepper, Switch, TextBox, ValueTextBox};
-use druid::{Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, theme, TimerToken, UpdateCtx, Widget, WidgetExt};
 use druid::text::ParseFormatter;
+use druid::widget::{Button, Controller, CrossAxisAlignment, Flex, Label, Scroll, Stepper, Switch, TextBox, ValueTextBox};
+use druid::{theme, Color, Data, Env, Event, EventCtx, LifeCycle, LifeCycleCtx, TimerToken, UpdateCtx, Widget, WidgetExt};
 use druid_material_icons::normal::action::SEARCH;
 use druid_material_icons::normal::content::ADD;
 use parking_lot::Mutex;
@@ -15,6 +15,7 @@ use crate::ui::actions::{open_key_picker, start_search};
 use crate::ui::widget::{Icon, WidgetButton, WrappingList};
 use crate::utils::keyset::VirtualKeySet;
 
+#[rustfmt::skip]
 pub fn ui() -> impl Widget<Config> + 'static {
     let host = host_ui()
         .lens(Config::host_address);
@@ -49,6 +50,7 @@ pub fn ui() -> impl Widget<Config> + 'static {
         .controller(SaveController::default())
 }
 
+#[rustfmt::skip]
 fn host_ui() -> impl Widget<String> + 'static {
     let host = TextBox::new().expand_width();
     let search = WidgetButton::new(Icon::from(SEARCH)
@@ -60,8 +62,9 @@ fn host_ui() -> impl Widget<String> + 'static {
         .with_child(search)
 }
 
+#[rustfmt::skip]
 fn speed_ui() -> impl Widget<f64> + 'static {
-    let formatter = ParseFormatter::with_format_fn(|v|format!("{:.02}", v));
+    let formatter = ParseFormatter::with_format_fn(|v| format!("{:.02}", v));
     let text_field = TextBox::new();
     let stepper = Stepper::new()
         .with_step(0.25);
@@ -71,6 +74,7 @@ fn speed_ui() -> impl Widget<f64> + 'static {
         .fix_width(85.0)
 }
 
+#[rustfmt::skip]
 fn network_ui() -> impl Widget<bool> + 'static {
     Switch::new()
         .env_scope(|env, _| {
@@ -83,6 +87,7 @@ fn network_ui() -> impl Widget<bool> + 'static {
         })
 }
 
+#[rustfmt::skip]
 fn hotkey_ui() -> impl Widget<Hotkey> + 'static {
     let add = add_button(|data, key| {
         let hotkey = &mut data.config.hotkey;
@@ -141,6 +146,7 @@ fn add_button(setter: fn(&mut AppState, VirtualKey)) -> impl Widget<()> + 'stati
         .on_click(move |ctx, _, _| open_key_picker(ctx, setter))
 }
 
+#[rustfmt::skip]
 fn key_ui() -> impl Widget<(VirtualKeySet, VirtualKey)> + 'static {
     Button::<(VirtualKeySet, VirtualKey)>::dynamic(|(_, key): &(_, VirtualKey), _| key.to_string())
         .on_click(|_, (set, key), _| set.remove(*key))
@@ -163,7 +169,8 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
         };
         if save {
             self.last_timer.take();
-            let changed =  self.saved_state
+            let changed = self
+                .saved_state
                 .lock()
                 .as_ref()
                 .map_or(false, |saved| !saved.same(data));
@@ -175,7 +182,7 @@ impl<W: Widget<Config>> Controller<Config, W> for SaveController {
                         Ok(_) => {
                             *saved.lock() = Some(config);
                             tracing::trace!("Successfully saved config");
-                        },
+                        }
                         Err(err) => tracing::warn!("Failed to save config: {}", err)
                     });
                 });

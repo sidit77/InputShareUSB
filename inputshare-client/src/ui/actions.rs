@@ -7,25 +7,33 @@ use mdns_sd::{Receiver, ServiceDaemon, ServiceEvent};
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
 use crate::connection;
-use crate::model::{AppState, ConnectionState, PopupType, SearchResult};
+use crate::model::{AppState, ConnectionCommand, ConnectionState, PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
 
 pub fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
-    ctx.add_rt_callback(move |rt, data| {
-        rt.hook = None;
-        if std::mem::take(&mut data.connection_state) == ConnectionState::Disconnected {
+    ctx.add_rt_callback(move |rt, data| match data.connection_state {
+        ConnectionState::Disconnected => {
             data.connection_state = ConnectionState::Connecting;
+            let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let host = data.config.host_address.clone();
             rt.runtime.spawn(async move {
-                connection(&handle, &host)
+                connection(&handle, receiver, &host)
                     .await
                     .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
                 handle.add_rt_callback(|rt, data| {
                     rt.hook = None;
+                    rt.connection = None;
                     data.connection_state = ConnectionState::Disconnected;
                 });
             });
+            rt.connection = Some(sender);
+        }
+        _ => match rt.connection.as_ref() {
+            None => tracing::warn!("Connection control channel missing"),
+            Some(channel) => channel
+                .send(ConnectionCommand::Disconnect)
+                .unwrap_or_else(|err| tracing::warn!("Can not send command: {}", err))
         }
     })
 }

@@ -10,11 +10,12 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::select;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::Instant;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
@@ -22,7 +23,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yawi::InputHook;
 
-use crate::model::AppState;
+use crate::model::{AppState, ConnectionCommand};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::widget::{theme, Theme};
@@ -55,11 +56,29 @@ pub fn main() {
         .expect("launch failed");
 }
 
-async fn connection(sink: &ExtEventSink, host: &str) -> anyhow::Result<()> {
-    let connection = connect(host).await?;
+async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str) -> anyhow::Result<()> {
+    let wait = async {
+        loop {
+            match controller.recv().await {
+                None => bail!("control channel closed"),
+                Some(ConnectionCommand::ShutdownServer) => tracing::warn!("Can not send a shutdown signal until connected"),
+                Some(ConnectionCommand::Disconnect) => {
+                    tracing::debug!("Canceling connection");
+                    return Ok(());
+                }
+            }
+        }
+    };
+    let connection = select! {
+        conn = connect(host) => conn?,
+        res = wait => return res
+    };
     tracing::debug!("Connected to {}", connection.remote_address());
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     sink.add_rt_callback(|rt, data| {
+        if rt.hook.is_some() {
+            tracing::warn!("Hook already exists");
+        }
         rt.hook = InputHook::register(hook::create_callback(&data.config, sender))
             .map_err(|err| tracing::warn!("Failed to register hook: {}", err))
             .ok();
@@ -81,7 +100,12 @@ async fn connection(sink: &ExtEventSink, host: &str) -> anyhow::Result<()> {
             },
             event = receiver.recv() => match event {
                 Some(event) => process_hook_event(&mut sender, sink, event),
-                None => break
+                None => bail!("Input hook got removed")
+            },
+            cmd = controller.recv() => match cmd {
+                None => bail!("controll channel got removed"),
+                Some(ConnectionCommand::Disconnect) => break,
+                Some(ConnectionCommand::ShutdownServer) => sender.shutdown_remote()
             },
             _ = timeout => {
                 let msg = sender.write_packet()?;
@@ -120,8 +144,6 @@ async fn connect(host: &str) -> anyhow::Result<Connection> {
         .find(|a| a.is_ipv4())
         .context("Could not resolve host")?;
     tracing::debug!("Resolved {} to {}", host, addrs);
-    let connection = endpoint
-        .connect(addrs, "dummy")?
-        .await?;
+    let connection = endpoint.connect(addrs, "dummy")?.await?;
     Ok(connection)
 }

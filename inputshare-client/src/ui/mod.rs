@@ -9,6 +9,7 @@ mod popup;
 mod status;
 pub mod widget;
 
+#[rustfmt::skip]
 pub fn ui() -> impl Widget<AppState> {
     let popup = Maybe::or_empty(popup::ui)
         .lens(AppState::popup);

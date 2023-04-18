@@ -8,6 +8,7 @@ use crate::model::{PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
 use crate::ui::actions::stop_service;
 
+#[rustfmt::skip]
 pub fn ui() -> impl Widget<PopupType> + 'static {
     ViewSwitcher::<PopupType, Discriminant<PopupType>>::new(
         |t, _| std::mem::discriminant(t),
@@ -50,6 +51,7 @@ fn search_popup_ui() -> impl Widget<Vector<SearchResult>> + 'static {
         .rounded(5.0)
 }
 
+#[rustfmt::skip]
 fn search_result_ui() -> impl Widget<SearchResult> + 'static {
     Button::dynamic(|res: &SearchResult, _| res.addrs.to_string())
         .on_click(|ctx, data: &mut SearchResult, _| {

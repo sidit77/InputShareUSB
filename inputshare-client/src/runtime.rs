@@ -3,9 +3,10 @@ use std::cell::Cell;
 use druid::{AppDelegate, Command, DelegateCtx, Env, EventCtx, ExtEventSink, Handled, Selector, Target};
 use mdns_sd::ServiceDaemon;
 use tokio::runtime::{Builder, Runtime};
+use tokio::sync::mpsc::UnboundedSender;
 use yawi::InputHook;
 
-use crate::model::AppState;
+use crate::model::{AppState, ConnectionCommand};
 
 type CallbackFunc = Cell<Option<Box<dyn FnOnce(&mut RuntimeDelegate, &mut AppState) + Send + 'static>>>;
 const CALLBACK: Selector<CallbackFunc> = Selector::new("inputshare.callback");
@@ -29,21 +30,23 @@ impl ExtEventSinkCallback for &mut EventCtx<'_, '_> {
 }
 
 pub struct RuntimeDelegate {
-    pub hook: Option<InputHook>,
     pub runtime: Runtime,
-    pub mdns: Option<ServiceDaemon>
+    pub hook: Option<InputHook>,
+    pub mdns: Option<ServiceDaemon>,
+    pub connection: Option<UnboundedSender<ConnectionCommand>>
 }
 
 impl RuntimeDelegate {
     pub fn new() -> Self {
         Self {
-            hook: None,
             runtime: Builder::new_multi_thread()
                 .enable_all()
                 .worker_threads(1)
                 .build()
                 .expect("Could not start async runtime"),
-            mdns: None
+            hook: None,
+            mdns: None,
+            connection: None
         }
     }
 }
@@ -59,5 +62,14 @@ impl AppDelegate<AppState> for RuntimeDelegate {
             }
             None => Handled::No
         }
+    }
+}
+
+impl Drop for RuntimeDelegate {
+    fn drop(&mut self) {
+        self.mdns = None;
+        self.connection = None;
+        self.hook = None;
+        //self.runtime.shutdown_timeout(Duration::from_secs(10));
     }
 }
