@@ -82,6 +82,7 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
         rt.hook = InputHook::register(hook::create_callback(&data.config, sender))
             .map_err(|err| tracing::warn!("Failed to register hook: {}", err))
             .ok();
+        data.enable_shutdown = true;
     });
 
     let mut sender = InputSender::new(1.0);

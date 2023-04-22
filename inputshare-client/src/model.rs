@@ -121,5 +121,6 @@ pub struct SearchResult {
 pub struct AppState {
     pub config: Config,
     pub connection_state: ConnectionState,
+    pub enable_shutdown: bool,
     pub popup: Option<PopupType>
 }

@@ -25,6 +25,7 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
                     rt.hook = None;
                     rt.connection = None;
                     data.connection_state = ConnectionState::Disconnected;
+                    data.enable_shutdown = false;
                 });
             });
             rt.connection = Some(sender);
@@ -36,6 +37,19 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
                 .unwrap_or_else(|err| tracing::warn!("Can not send command: {}", err))
         }
     })
+}
+
+pub fn shutdown_server(ctx: &mut EventCtx) {
+    ctx.add_rt_callback(|rt, data| {
+        if !data.enable_shutdown {
+            tracing::warn!("Shutdown functions is currently not enabled");
+            return;
+        }
+        rt.connection
+            .as_ref()
+            .and_then(|sender| sender.send(ConnectionCommand::ShutdownServer).ok())
+            .unwrap_or_else(|| tracing::warn!("Failed to send shutdown signal!"));
+    });
 }
 
 pub fn start_search(ctx: &mut EventCtx) {
