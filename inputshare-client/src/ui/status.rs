@@ -2,7 +2,7 @@ use druid::theme::TEXT_COLOR;
 use druid::widget::{Button, Either, Flex, Label, Maybe, SizedBox};
 use druid::{Color, Env, Insets, Lens, LensExt, Widget, WidgetExt};
 
-use crate::model::{AppState, ConnectionState, Side};
+use crate::model::{AppState, ConnectionState, NetworkInfo, Side};
 use crate::ui::actions::{initiate_connection, shutdown_server};
 
 #[rustfmt::skip]
@@ -10,7 +10,7 @@ pub fn ui() -> impl Widget<AppState> + 'static {
     let status = Flex::column()
         .with_child(Label::dynamic(connection_status)
             .with_text_size(15.0))
-        .with_child(Maybe::or_empty(side_label).lens(side_lens()))
+        .with_child(Maybe::or_empty(side_ui).lens(side_lens()))
         .center()
         .expand()
         .border(druid::theme::BORDER_DARK, 2.0)
@@ -26,7 +26,8 @@ pub fn ui() -> impl Widget<AppState> + 'static {
         .with_flex_child(connect_button, 1.0)
         .with_child(Either::new(|data: &AppState, _| data.enable_shutdown, shutdown_button, SizedBox::empty()))
         .fix_width(100.0);
-    let info = Label::new("info")
+    let info = Maybe::new(info_ui, ||Label::new("-"))
+        .lens(AppState::network_info)
         .center()
         .border(druid::theme::BORDER_DARK, 2.0)
         .rounded(2.0)
@@ -42,13 +43,19 @@ pub fn ui() -> impl Widget<AppState> + 'static {
 }
 
 #[rustfmt::skip]
-fn side_label() -> impl Widget<Side> + 'static {
+fn side_ui() -> impl Widget<Side> + 'static {
     Label::dynamic(|side: &Side, _| format!("{:?}", side))
         .with_text_size(25.0)
         .env_scope(|env, data: &Side| env.set(TEXT_COLOR, match data {
             Side::Local => Color::BLUE,
             Side::Remote => Color::RED
         }))
+}
+
+#[rustfmt::skip]
+fn info_ui() -> impl Widget<NetworkInfo> + 'static {
+    Label::dynamic(|info: &NetworkInfo, _| format!("{:?}\n{}\n{}", info.rtt, info.lost_packets, info.congestion_events))
+        .with_text_size(12.0)
 }
 
 fn button_label(data: &AppState, _: &Env) -> String {

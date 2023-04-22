@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use directories::BaseDirs;
 use druid::im::Vector;
@@ -122,9 +123,26 @@ pub struct SearchResult {
 }
 
 #[derive(Default, Debug, Clone, Data, Lens)]
+pub struct NetworkInfo {
+    /// Current best estimate of this connection's latency (round-trip-time)
+    pub rtt: Duration,
+    /// Current congestion window of the connection
+    pub cwnd: u64,
+    /// Congestion events on the connection
+    pub congestion_events: u64,
+    /// The amount of packets lost on this path
+    pub lost_packets: u64,
+    /// The amount of bytes lost on this path
+    pub lost_bytes: u64,
+    /// The amount of packets sent on this path
+    pub sent_packets: u64,
+}
+
+#[derive(Default, Debug, Clone, Data, Lens)]
 pub struct AppState {
     pub config: Config,
     pub connection_state: ConnectionState,
     pub enable_shutdown: bool,
+    pub network_info: Option<NetworkInfo>,
     pub popup: Option<PopupType>
 }

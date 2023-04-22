@@ -14,7 +14,7 @@ use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use eyre::{eyre, WrapErr};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
-use tokio::select;
+use tokio::{select, spawn};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -25,7 +25,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yawi::InputHook;
 
-use crate::model::{AppState, ConnectionCommand};
+use crate::model::{AppState, ConnectionCommand, NetworkInfo};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::widget::{theme, Theme};
@@ -63,7 +63,7 @@ pub fn main() {
 }
 
 #[instrument(skip(sink, controller))]
-async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str) -> eyre::Result<()> {
+async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str, info: bool) -> eyre::Result<()> {
     let wait = async {
         loop {
             match controller.recv().await {
@@ -76,11 +76,16 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
             }
         }
     };
-    let connection = select! {
+    let connection: Connection = select! {
         conn = connect(host) => conn?,
         res = wait => return res
     };
     tracing::debug!("Connected to {}", connection.remote_address());
+
+    if info {
+        spawn(collect_network_info(connection.clone(), sink.clone()));
+    }
+
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     sink.add_rt_callback(|rt, data| {
         tracing::info_span!("register input hook").in_scope(move || {
@@ -131,6 +136,7 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
         };
     }
 
+    connection.close(0u8.into(), b"Disconnected");
     tracing::trace!("Shutting down key handler");
 
     Ok(())
@@ -158,4 +164,26 @@ async fn connect(host: &str) -> eyre::Result<Connection> {
     tracing::debug!("Resolved {} to {}", host, addrs);
     let connection = endpoint.connect(addrs, "dummy")?.await?;
     Ok(connection)
+}
+
+#[instrument(skip(connection, sink))]
+async fn collect_network_info(connection: Connection, sink: ExtEventSink) {
+    while connection.close_reason().is_none() {
+        let path = connection.stats().path;
+        let info = NetworkInfo {
+            rtt: path.rtt,
+            cwnd: path.cwnd,
+            congestion_events: path.congestion_events,
+            lost_packets: path.lost_packets,
+            lost_bytes: path.lost_bytes,
+            sent_packets: path.sent_packets,
+        };
+        sink.add_idle_callback(move |data: &mut AppState| {
+            data.network_info = Some(info);
+        });
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    sink.add_idle_callback(move |data: &mut AppState| {
+        data.network_info = None;
+    });
 }
