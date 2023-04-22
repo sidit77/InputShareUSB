@@ -149,7 +149,7 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
             Err(ConnectionError::ApplicationClosed(close)) => {
                 tracing::debug!("Connection closed: {}", close);
                 return Ok(());
-            },
+            }
             Err(ConnectionError::LocallyClosed) => {
                 tracing::debug!("Closing Connection");
                 return Ok(());

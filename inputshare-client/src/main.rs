@@ -82,16 +82,17 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
     };
     tracing::debug!("Connected to {}", connection.remote_address());
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-    sink.add_rt_callback(|rt, data| tracing::info_span!("register input hook").in_scope(move || {
-        if rt.hook.is_some() {
-            tracing::warn!("Hook already exists");
-        }
-        rt.hook = InputHook::register(hook::create_callback(&data.config, sender))
-            .map_err(|err| tracing::warn!("Failed to register hook: {}", err))
-            .ok();
-        data.enable_shutdown = true;
-        tracing::info!("terzt");
-    }));
+    sink.add_rt_callback(|rt, data| {
+        tracing::info_span!("register input hook").in_scope(move || {
+            if rt.hook.is_some() {
+                tracing::warn!("Hook already exists");
+            }
+            rt.hook = InputHook::register(hook::create_callback(&data.config, sender))
+                .map_err(|err| tracing::warn!("Failed to register hook: {}", err))
+                .ok();
+            data.enable_shutdown = true;
+        })
+    });
 
     let mut sender = InputSender::new(1.0);
     let mut deadline = None;
