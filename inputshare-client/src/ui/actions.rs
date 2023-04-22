@@ -9,7 +9,7 @@ use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
 use crate::connection;
 use crate::model::{AppState, ConnectionCommand, ConnectionState, PopupType, SearchResult};
-use crate::runtime::ExtEventSinkCallback;
+use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::utils::error::strip_color;
 
 #[instrument(skip(ctx))]
@@ -31,7 +31,7 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
                     data.network_info = None;
                     if let Err(err) = result {
                         tracing::warn!("could not establish connection: {:?}", err);
-                        data.popup = Some(PopupType::Error(strip_color(&format!("{:?}", err))));
+                        open_popup(rt, data, PopupType::Error(strip_color(&format!("{:?}", err))));
                     }
                 });
             });
@@ -46,6 +46,7 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
     })
 }
 
+#[instrument(skip(ctx))]
 pub fn shutdown_server(ctx: &mut EventCtx) {
     ctx.add_rt_callback(|rt, data| {
         if !data.enable_shutdown {
@@ -59,6 +60,7 @@ pub fn shutdown_server(ctx: &mut EventCtx) {
     });
 }
 
+#[instrument(skip(ctx))]
 pub fn start_search(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
     ctx.add_rt_callback(move |rt, data| {
@@ -69,18 +71,23 @@ pub fn start_search(ctx: &mut EventCtx) {
             match mdns.browse("_inputshare._udp.local.") {
                 Ok(receiver) => {
                     rt.mdns = Some(mdns);
-                    data.popup = Some(PopupType::Searching(Vector::new()));
+                    open_popup(rt, data, PopupType::Searching(Vector::new()));
                     rt.runtime.spawn(update_popup(receiver, handle));
                 }
                 Err(err) => {
                     tracing::warn!("Could not browse: {}", err);
-                    stop_service(Some(mdns));
+                    let service = Some(mdns);
+                    if let Some(t) = service {
+                        t.shutdown()
+                            .unwrap_or_else(|err| tracing::warn!("Error shutting down mdns service: {}", err))
+                    }
                 }
             }
         }
     })
 }
 
+#[instrument(skip(ctx, receiver))]
 async fn update_popup(receiver: Receiver<ServiceEvent>, ctx: ExtEventSink) {
     while let Ok(event) = receiver.recv_async().await {
         if let ServiceEvent::ServiceResolved(info) = event {
@@ -97,16 +104,12 @@ async fn update_popup(receiver: Receiver<ServiceEvent>, ctx: ExtEventSink) {
     tracing::trace!("Search popup is no longer updated");
 }
 
-pub fn stop_service(service: Option<ServiceDaemon>) {
-    if let Some(t) = service {
-        t.shutdown()
-            .unwrap_or_else(|err| tracing::warn!("Error shutting down mdns service: {}", err))
-    }
-}
-
+#[instrument(skip(ctx, setter))]
 pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, VirtualKey) + Send + 'static) {
     let handle = ctx.get_external_handle();
+    let span = tracing::Span::current();
     ctx.add_rt_callback(move |rt, data| {
+        let _enter = span.enter();
         if data.connection_state != ConnectionState::Disconnected {
             return;
         }
@@ -127,9 +130,8 @@ pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, Vi
             }) if found == Some(key) => {
                 if let Some(setter) = setter.take() {
                     handle.add_rt_callback(move |rt, data| {
-                        rt.hook = None;
                         setter(data, key);
-                        data.popup = None;
+                        close_popup(rt, data);
                     });
                 }
                 HookAction::Block
@@ -138,6 +140,32 @@ pub fn open_key_picker(ctx: &mut EventCtx, setter: impl FnOnce(&mut AppState, Vi
         })
         .map_err(|err| tracing::warn!("Could not register hook: {}", err))
         .ok();
-        data.popup = Some(PopupType::PressKey);
+        open_popup(rt, data, PopupType::PressKey);
     })
+}
+
+#[instrument(skip(rt, data))]
+pub fn close_popup(rt: &mut RuntimeDelegate, data: &mut AppState) {
+    match data.popup.take() {
+        Some(PopupType::PressKey) => {
+            rt.hook = None;
+        }
+        Some(PopupType::Searching(_)) => {
+            let service = rt.mdns.take();
+            if let Some(t) = service {
+                t.shutdown()
+                    .unwrap_or_else(|err| tracing::warn!("Error shutting down mdns service: {}", err))
+            }
+        }
+        _ => {}
+    }
+}
+
+#[instrument(skip(rt, data))]
+pub fn open_popup(rt: &mut RuntimeDelegate, data: &mut AppState, popup: PopupType) {
+    if data.popup.is_some() {
+        tracing::warn!("Another popup is already open");
+        close_popup(rt, data);
+    }
+    data.popup = Some(popup);
 }

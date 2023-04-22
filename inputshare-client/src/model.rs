@@ -135,7 +135,7 @@ pub struct NetworkInfo {
     /// The amount of bytes lost on this path
     pub lost_bytes: u64,
     /// The amount of packets sent on this path
-    pub sent_packets: u64,
+    pub sent_packets: u64
 }
 
 #[derive(Default, Debug, Clone, Data, Lens)]

@@ -14,9 +14,9 @@ use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
 use eyre::{eyre, WrapErr};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
-use tokio::{select, spawn};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::Instant;
+use tokio::{select, spawn};
 use tracing::instrument;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -176,7 +176,7 @@ async fn collect_network_info(connection: Connection, sink: ExtEventSink) {
             congestion_events: path.congestion_events,
             lost_packets: path.lost_packets,
             lost_bytes: path.lost_bytes,
-            sent_packets: path.sent_packets,
+            sent_packets: path.sent_packets
         };
         sink.add_idle_callback(move |data: &mut AppState| {
             data.network_info = Some(info);
