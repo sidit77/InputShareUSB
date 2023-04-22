@@ -545,6 +545,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eyre"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2b6b5a29c02cdc822728b7d7b8ae1bab3e3b05d44522770ddd49722eeac7eb"
+dependencies = [
+ "indenter",
+ "once_cell",
+]
+
+[[package]]
 name = "field-offset"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -965,6 +975,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "indenter"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -978,15 +994,16 @@ dependencies = [
 name = "inputshare-client"
 version = "2.3.0"
 dependencies = [
- "anyhow",
  "byteorder",
  "bytes",
  "directories",
  "druid",
  "druid-material-icons",
  "error-tools",
+ "eyre",
  "inputshare-common",
  "mdns-sd",
+ "once_cell",
  "parking_lot",
  "quinn",
  "ron",

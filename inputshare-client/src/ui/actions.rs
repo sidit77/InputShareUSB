@@ -26,8 +26,8 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
                     data.connection_state = ConnectionState::Disconnected;
                     data.enable_shutdown = false;
                     if let Err(err) = result {
-                        tracing::warn!("could not establish connection: {}\n{}", err, err.backtrace());
-                        data.popup = Some(PopupType::Error(format!("{}\n{}", err, err.backtrace())));
+                        tracing::warn!("could not establish connection: {}", err);
+                        data.popup = Some(PopupType::Error(format!("{}", err)));
                     }
                 });
             });

@@ -1,7 +1,7 @@
 use std::mem::Discriminant;
 
 use druid::im::Vector;
-use druid::widget::{BackgroundBrush, Button, Flex, Label, List, Scroll, TextBox, ViewSwitcher};
+use druid::widget::{BackgroundBrush, Button, Flex, Label, List, TextBox, ViewSwitcher};
 use druid::{Color, Lens, LensExt, Widget, WidgetExt};
 
 use crate::model::{PopupType, SearchResult};
@@ -34,6 +34,8 @@ pub fn ui() -> impl Widget<PopupType> + 'static {
 fn error_popup_ui() -> impl Widget<String> + 'static {
     let error = TextBox::multiline()
         .scroll()
+        .content_must_fill(true)
+        .expand()
         .lens(readonly_lens());
     let text = Label::new("Unexpected Error")
         .with_text_size(20.0)
@@ -47,6 +49,7 @@ fn error_popup_ui() -> impl Widget<String> + 'static {
             .with_child(back))
         .with_spacer(5.0)
         .with_flex_child(error, 1.0)
+        .expand()
         .padding(7.0)
         .background(druid::theme::BACKGROUND_DARK)
         .rounded(5.0)

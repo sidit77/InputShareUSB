@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::Context;
 use directories::BaseDirs;
 use druid::im::Vector;
 use druid::{Data, Lens};
+use once_cell::sync::Lazy;
 use ron::ser::{to_string_pretty, PrettyConfig};
 use serde::{Deserialize, Serialize};
 use yawi::VirtualKey;
@@ -64,14 +64,18 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn path() -> anyhow::Result<PathBuf> {
-        let dirs = BaseDirs::new().context("Can not get base dirs")?;
-        let config_dir = dirs.config_dir();
-        Ok(config_dir.join("InputShare.ron"))
+    pub fn path() -> &'static Path {
+        static PATH: Lazy<PathBuf> = Lazy::new(|| {
+            let dirs = BaseDirs::new()
+                .expect("Can not get base dirs");
+            let config_dir = dirs.config_dir();
+            config_dir.join("InputShare.ron")
+        });
+        PATH.as_path()
     }
 
-    pub fn load() -> anyhow::Result<Self> {
-        let path = Self::path()?;
+    pub fn load() -> eyre::Result<Self> {
+        let path = Self::path();
         let config: Self = match path.exists() {
             true => {
                 let file = std::fs::read_to_string(path)?;
@@ -86,9 +90,9 @@ impl Config {
         Ok(config)
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&self) -> eyre::Result<()> {
         let pretty = PrettyConfig::new();
-        Ok(std::fs::write(Self::path()?, to_string_pretty(self, pretty)?)?)
+        Ok(std::fs::write(Self::path(), to_string_pretty(self, pretty)?)?)
     }
 }
 

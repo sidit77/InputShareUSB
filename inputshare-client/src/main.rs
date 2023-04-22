@@ -10,9 +10,9 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Context};
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
+use eyre::eyre;
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::select;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -56,11 +56,11 @@ pub fn main() {
         .expect("launch failed");
 }
 
-async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str) -> anyhow::Result<()> {
+async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str) -> eyre::Result<()> {
     let wait = async {
         loop {
             match controller.recv().await {
-                None => bail!("control channel closed"),
+                None => return Err(eyre!("control channel closed")),
                 Some(ConnectionCommand::ShutdownServer) => tracing::warn!("Can not send a shutdown signal until connected"),
                 Some(ConnectionCommand::Disconnect) => {
                     tracing::debug!("Canceling connection");
@@ -101,10 +101,10 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
             },
             event = receiver.recv() => match event {
                 Some(event) => process_hook_event(&mut sender, sink, event),
-                None => bail!("Input hook got removed")
+                None => return Err(eyre!("Input hook got removed"))
             },
             cmd = controller.recv() => match cmd {
-                None => bail!("controll channel got removed"),
+                None => return Err(eyre!("control channel got removed")),
                 Some(ConnectionCommand::Disconnect) => break,
                 Some(ConnectionCommand::ShutdownServer) => sender.shutdown_remote()
             },
@@ -127,7 +127,7 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
     Ok(())
 }
 
-async fn connect(host: &str) -> anyhow::Result<Connection> {
+async fn connect(host: &str) -> eyre::Result<Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -143,7 +143,7 @@ async fn connect(host: &str) -> anyhow::Result<Connection> {
     let addrs = host
         .to_socket_addrs()?
         .find(|a| a.is_ipv4())
-        .context("Could not resolve host")?;
+        .ok_or_else(|| eyre!("Can not find suitable address"))?;
     tracing::debug!("Resolved {} to {}", host, addrs);
     let connection = endpoint.connect(addrs, "dummy")?.await?;
     Ok(connection)
