@@ -12,11 +12,13 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use druid::{AppLauncher, ExtEventSink, WindowDesc};
-use eyre::eyre;
+use eyre::{eyre, WrapErr};
 use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 use tokio::select;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::Instant;
+use tracing::instrument;
+use tracing_error::ErrorLayer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
@@ -27,9 +29,12 @@ use crate::model::{AppState, ConnectionCommand};
 use crate::runtime::{ExtEventSinkCallback, RuntimeDelegate};
 use crate::sender::InputSender;
 use crate::ui::widget::{theme, Theme};
+use crate::utils::error::set_eyre_hook;
 use crate::utils::{hook, process_hook_event, SkipServerVerification};
 
+#[instrument]
 pub fn main() {
+    set_eyre_hook();
     tracing_subscriber::registry()
         .with(
             Targets::new()
@@ -40,6 +45,7 @@ pub fn main() {
                 .with_target("mdns_sd", LevelFilter::INFO)
         )
         .with(layer().without_time())
+        .with(ErrorLayer::default())
         .init();
 
     #[cfg(not(debug_assertions))]
@@ -56,6 +62,7 @@ pub fn main() {
         .expect("launch failed");
 }
 
+#[instrument(skip(sink, controller))]
 async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str) -> eyre::Result<()> {
     let wait = async {
         loop {
@@ -127,6 +134,7 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
     Ok(())
 }
 
+#[instrument]
 async fn connect(host: &str) -> eyre::Result<Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
@@ -141,7 +149,8 @@ async fn connect(host: &str) -> eyre::Result<Connection> {
     endpoint.set_default_client_config(config);
 
     let addrs = host
-        .to_socket_addrs()?
+        .to_socket_addrs()
+        .wrap_err("Is the used host name correct?")?
         .find(|a| a.is_ipv4())
         .ok_or_else(|| eyre!("Can not find suitable address"))?;
     tracing::debug!("Resolved {} to {}", host, addrs);

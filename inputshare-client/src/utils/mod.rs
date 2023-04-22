@@ -9,6 +9,7 @@ use crate::utils::conversions::{f32_to_i8, vk_to_mb, wsc_to_cdc, wsc_to_hkc};
 use crate::utils::hook::HookEvent;
 
 pub mod conversions;
+pub mod error;
 pub mod hook;
 pub mod keyset;
 

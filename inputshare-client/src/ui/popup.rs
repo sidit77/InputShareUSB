@@ -40,13 +40,14 @@ fn error_popup_ui() -> impl Widget<String> + 'static {
     let text = Label::new("Unexpected Error")
         .with_text_size(20.0)
         .expand_width();
-    let back = Button::new("Back")
-        .on_click(|ctx, _, _| ctx.add_rt_callback(|_, data| data.popup = None));
+    let back = Button::new("Back").on_click(|ctx, _, _| ctx.add_rt_callback(|_, data| data.popup = None));
     Flex::column()
-        .with_child(Flex::row()
-            .with_flex_child(text, 1.0)
-            .with_spacer(5.0)
-            .with_child(back))
+        .with_child(
+            Flex::row()
+                .with_flex_child(text, 1.0)
+                .with_spacer(5.0)
+                .with_child(back)
+        )
         .with_spacer(5.0)
         .with_flex_child(error, 1.0)
         .expand()
@@ -115,8 +116,5 @@ fn error_lens() -> impl Lens<PopupType, String> {
 }
 
 fn readonly_lens() -> impl Lens<String, String> {
-    druid::lens::Identity.map(
-        |data: &String | data.clone(),
-        |_, _| {}
-    )
+    druid::lens::Identity.map(|data: &String| data.clone(), |_, _| {})
 }

@@ -4,12 +4,15 @@ use std::net::{IpAddr, SocketAddr};
 use druid::im::Vector;
 use druid::{EventCtx, ExtEventSink};
 use mdns_sd::{Receiver, ServiceDaemon, ServiceEvent};
+use tracing::instrument;
 use yawi::{HookAction, InputEvent, InputHook, KeyState, VirtualKey};
 
 use crate::connection;
 use crate::model::{AppState, ConnectionCommand, ConnectionState, PopupType, SearchResult};
 use crate::runtime::ExtEventSinkCallback;
+use crate::utils::error::strip_color;
 
+#[instrument(skip(ctx))]
 pub fn initiate_connection(ctx: &mut EventCtx) {
     let handle = ctx.get_external_handle();
     ctx.add_rt_callback(move |rt, data| match data.connection_state {
@@ -18,16 +21,15 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let host = data.config.host_address.clone();
             rt.runtime.spawn(async move {
-                let result = connection(&handle, receiver, &host)
-                    .await;
+                let result = connection(&handle, receiver, &host).await;
                 handle.add_rt_callback(|rt, data| {
                     rt.hook = None;
                     rt.connection = None;
                     data.connection_state = ConnectionState::Disconnected;
                     data.enable_shutdown = false;
                     if let Err(err) = result {
-                        tracing::warn!("could not establish connection: {}", err);
-                        data.popup = Some(PopupType::Error(format!("{}", err)));
+                        tracing::warn!("could not establish connection: {:?}", err);
+                        data.popup = Some(PopupType::Error(strip_color(&format!("{:?}", err))));
                     }
                 });
             });

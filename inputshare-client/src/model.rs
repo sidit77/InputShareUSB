@@ -66,8 +66,7 @@ impl Default for Config {
 impl Config {
     pub fn path() -> &'static Path {
         static PATH: Lazy<PathBuf> = Lazy::new(|| {
-            let dirs = BaseDirs::new()
-                .expect("Can not get base dirs");
+            let dirs = BaseDirs::new().expect("Can not get base dirs");
             let config_dir = dirs.config_dir();
             config_dir.join("InputShare.ron")
         });
