@@ -87,16 +87,16 @@ async fn main() -> Result<()> {
         });
     }
 
-    select! {
-        res = server(endpoint, args) => {
-            if let Err(err) = res {
-                tracing::error!("server crashed: {}", err);
-            }
-        }
-        _ = quit() => {
+    tokio::spawn({
+        let endpoint = endpoint.clone();
+        async move {
+            quit().await;
             tracing::debug!("Received quit signal");
+            endpoint.close(0u8.into(), b"Server shutting down");
         }
-    };
+    });
+
+    server(endpoint, args).await?;
     mdns.shutdown()?;
     Ok(())
 }
@@ -134,6 +134,7 @@ async fn server(endpoint: Endpoint, args: Args) -> Result<()> {
             }
         });
     }
+    tracing::info!("Stopping server");
     Ok(())
 }
 
@@ -147,6 +148,10 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
             Ok(msg) => msg,
             Err(ConnectionError::ApplicationClosed(close)) => {
                 tracing::debug!("Connection closed: {}", close);
+                return Ok(());
+            },
+            Err(ConnectionError::LocallyClosed) => {
+                tracing::debug!("Closing Connection");
                 return Ok(());
             }
             Err(err) => return Err(err.into())
