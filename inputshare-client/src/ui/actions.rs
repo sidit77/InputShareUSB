@@ -18,14 +18,17 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let host = data.config.host_address.clone();
             rt.runtime.spawn(async move {
-                connection(&handle, receiver, &host)
-                    .await
-                    .unwrap_or_else(|err| tracing::warn!("could not establish connection: {}", err));
+                let result = connection(&handle, receiver, &host)
+                    .await;
                 handle.add_rt_callback(|rt, data| {
                     rt.hook = None;
                     rt.connection = None;
                     data.connection_state = ConnectionState::Disconnected;
                     data.enable_shutdown = false;
+                    if let Err(err) = result {
+                        tracing::warn!("could not establish connection: {}\n{}", err, err.backtrace());
+                        data.popup = Some(PopupType::Error(format!("{}\n{}", err, err.backtrace())));
+                    }
                 });
             });
             rt.connection = Some(sender);

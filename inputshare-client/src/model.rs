@@ -109,6 +109,7 @@ pub enum ConnectionState {
 #[derive(Debug, Clone, Eq, PartialEq, Data)]
 pub enum PopupType {
     Searching(Vector<SearchResult>),
+    Error(String),
     PressKey
 }
 

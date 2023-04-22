@@ -1,7 +1,7 @@
 use std::mem::Discriminant;
 
 use druid::im::Vector;
-use druid::widget::{BackgroundBrush, Button, Flex, Label, List, ViewSwitcher};
+use druid::widget::{BackgroundBrush, Button, Flex, Label, List, Scroll, TextBox, ViewSwitcher};
 use druid::{Color, Lens, LensExt, Widget, WidgetExt};
 
 use crate::model::{PopupType, SearchResult};
@@ -19,12 +19,39 @@ pub fn ui() -> impl Widget<PopupType> + 'static {
                     .boxed(),
             PopupType::PressKey =>
                 key_popup_ui()
+                    .boxed(),
+            PopupType::Error(_) =>
+                error_popup_ui()
+                    .lens(error_lens())
                     .boxed()
         }
     )
     .center()
     .background(BackgroundBrush::Color(Color::rgba8(0, 0, 0, 128)))
     .expand()
+}
+
+fn error_popup_ui() -> impl Widget<String> + 'static {
+    let error = TextBox::multiline()
+        .scroll()
+        .lens(readonly_lens());
+    let text = Label::new("Unexpected Error")
+        .with_text_size(20.0)
+        .expand_width();
+    let back = Button::new("Back")
+        .on_click(|ctx, _, _| ctx.add_rt_callback(|_, data| data.popup = None));
+    Flex::column()
+        .with_child(Flex::row()
+            .with_flex_child(text, 1.0)
+            .with_spacer(5.0)
+            .with_child(back))
+        .with_spacer(5.0)
+        .with_flex_child(error, 1.0)
+        .padding(7.0)
+        .background(druid::theme::BACKGROUND_DARK)
+        .rounded(5.0)
+        .padding(30.0)
+        .expand()
 }
 
 fn key_popup_ui() -> impl Widget<PopupType> + 'static {
@@ -71,5 +98,22 @@ fn search_lens() -> impl Lens<PopupType, Vector<SearchResult>> {
             _ => unreachable!()
         },
         |data, vec| *data = PopupType::Searching(vec)
+    )
+}
+
+fn error_lens() -> impl Lens<PopupType, String> {
+    druid::lens::Identity.map(
+        |data| match data {
+            PopupType::Error(s) => s.clone(),
+            _ => unreachable!()
+        },
+        |data, s| *data = PopupType::Error(s)
+    )
+}
+
+fn readonly_lens() -> impl Lens<String, String> {
+    druid::lens::Identity.map(
+        |data: &String | data.clone(),
+        |_, _| {}
     )
 }
