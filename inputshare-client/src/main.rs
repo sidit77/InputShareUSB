@@ -54,6 +54,7 @@ pub fn main() {
 
     let window = WindowDesc::new(ui::ui())
         .window_size((400.0, 400.0))
+        .with_min_size((400.0, 400.0))
         .title("InputShare Client");
 
     AppLauncher::with_window(window)
