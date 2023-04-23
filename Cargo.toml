@@ -8,4 +8,5 @@ members = [
 
 [profile.release]
 lto = true
-strip="symbols"
+split-debuginfo = "packed"
+#strip="symbols"

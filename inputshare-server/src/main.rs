@@ -4,11 +4,12 @@ mod receiver;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use clap::{arg, command, Parser};
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 use quinn::{Connecting, ConnectionError, Endpoint, ServerConfig};
+use tokio::process::Command;
 use tokio::select;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing_subscriber::filter::{LevelFilter, Targets};
@@ -218,8 +219,8 @@ async fn configfs_input_processor(args: Args) -> Result<UnboundedSender<InputEve
                                     Ok(())
                                 }
                                 .await
-                            }
-                            InputEvent::Shutdown => Ok(tracing::warn!("Shutdown is currently not supported!"))
+                            },
+                            InputEvent::Shutdown => run_command("shutdown", &["-r", "now"]).await,
                         };
                         if let Err(err) = result {
                             tracing::error!("Could not write hid command: {}", err);
@@ -240,4 +241,12 @@ async fn configfs_input_processor(args: Args) -> Result<UnboundedSender<InputEve
         tracing::debug!("Stopping configfs processor");
     });
     Ok(sender)
+}
+
+async fn run_command(command: &str, args: &[&str]) -> Result<()> {
+    let output = Command::new(command).args(args).output().await?;
+    if output.status.success() && output.stderr.is_empty() {
+        return Ok(());
+    }
+    bail!("{}", String::from_utf8_lossy(&output.stderr));
 }
