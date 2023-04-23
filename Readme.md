@@ -66,15 +66,14 @@ The binary will be in `/target/release/inputshare-client.exe`
 
 #### Step 2: Configuration
 
-During the first run the client will generate a config file called `inputshare-client.json`. The config file  contains the following options:
+* `Host`: The address of the raspberry pi that runs the sever. You can press the search button to automatically search in your local network.
+* `Hotkey`: The hotkey that toggles input between the local and remote pc. The hotkey has two parts: the trigger key which triggers the swap and a variable amount of modifier keys which also have to be pressed for the trigger to work.
+* `Blacklist`: All keys included in in this list will be ignored by the client.
+* `Network Info`: When enabled the client will display the round-trip-time and packet loss to the server.
+* `Mouse Speed`: changes the mouse speed of the remote device
+* `network_send_rate` (config only): The number of packets per second that the client will send to the server while transmitting. Higher values mean lower latency and smoother mouse movement while lower values mean less network activity. Note that if the send rate is set to high it will flood the connection and cause massive delays / packet loss. Consider that the `mouse-tesselation-factor` option of the server has a similar effect and should be tuned in tandem.
 
-* `host_address` (**Important**): The address of the raspberry pi that runs the sever
-* `hotkey`: The hotkey that toggles input between the local and remote pc. The hotkey has two parts: the trigger key which triggers the swap and a variable amount of modifier keys which also have to be pressed for the trigger to work. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
-* `blacklist`: All keys included in in this list will be ignored by the client. Supported values: [Possible key codes](#appendix-a-possible-key-codes).
-* `show_network_info`: When set to `true` the client will display the round-trip-time and packet loss to the server. This call also be toggled at runtime by pressing [Show network info](#client).
-* `network_send_rate`: The number of packets per second that the client will send to the server while transmitting. Higher values mean lower latency and smoother mouse movement while lower values mean less network activity. Note that if the send rate is set to high it will flood the connection and cause massive delays / packet loss. Consider that the `mouse-tesselation-factor` option of the server has a similar effect and should be tuned in tandem.
-* `mouse_speed_factor`: changes the mouse speed of the remote device
-
+The config is stored in `%appdata%/InputShare.ron`.
 
 ### Server
 
@@ -103,7 +102,7 @@ Not every raspberry pi version uses the same architecture.
 
 You can download prebuild binaries for from the [Github Release Page](https://github.com/sidit77/InputShareUSB/releases).
 
-Simply extract the binary and copy to to the raspberry pi.
+Simply extract the binary and copy to the raspberry pi.
 
 
 
@@ -195,20 +194,4 @@ sudo systemctl enable inputshare_server.service
 ## License
 
 MIT License
-
-
-
-## Appendix A: Possible key codes
-
-```
-Accept, Add, Apps, Attn, Back, BrowserBack, BrowserFavorites, BrowserForward, BrowserHome, BrowserRefresh, BrowserSearch, BrowserStop, Cancel, Capital, Clear, Control, Convert, Crsel, Decimal, Delete, Divide, Down, End, Ereof, Escape, Execute, Exsel, F1, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F2, F20, F21, F22, F23, F24, F3, F4, F5, F6, F7, F8, F9, Final, GamepadA, GamepadB, GamepadDPadDown, GamepadDPadLeft, GamepadDPadRight, GamepadDPadUp, GamepadLeftShoulder, GamepadLeftThumbStickBut, GamepadLeftThumbStickDow, GamepadLeftThumbStickLef, GamepadLeftThumbStickRig, GamepadLeftThumbStickUp, GamepadLeftTrigger, GamepadMenu, GamepadRightShoulder, GamepadRightThumbStickBu, GamepadRightThumbStickDo, GamepadRightThumbStickLe, GamepadRightThumbStickRi, GamepadRightThumbStickUp, GamepadRightTrigger, GamepadView, GamepadX, GamepadY, HanjaKanji, Help, Home, Ico00, IcoClear, IcoHelp, ImeOff, ImeOn, Insert, Junja, KanaHangeulHangul, Key0, Key1, Key2, Key3, Key4, Key5, Key6, Key7, Key8, Key9, KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ, LaunchApp1, LaunchApp2, LaunchMail, LaunchMediaSelect, LButton, LControl, Left, LMenu, LShift, LWin, MButton, MediaNextTrack, MediaPlayPause, MediaPrevTrack, MediaStop, Menu, ModeChange, Multiply, NavigationAccept, NavigationCancel, NavigationDown, NavigationLeft, NavigationMenu, NavigationRight, NavigationUp, NavigationView, Next, Noname, NonConvert, Numlock, Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9, Oem1, Oem102, Oem2, Oem3, Oem4, Oem5, Oem6, Oem7, Oem8, OemAttn, OemAuto, OemAx, OemBackTab, OemClear, OemComma, OemCopy, OemCusel, OemEnlw, OemFinish, OemFjLoya, OemFjMasshou, OemFjRoya, OemFjTouroku, OemJump, OemMinus, OemNecEqualFjJisho, OemPa1, OemPa2, OemPa3, OemPeriod, OemPlus, OemReset, OemWsCtrl, Pa1, Packet, Pause, Play, Print, Prior, ProcessKey, RButton, RControl, Return, Right, RMenu, RShift, RWin, Scroll, Select, Separator, Shift, Sleep, Snapshot, Space, Subtract, Tab, Up, VolumeDown, VolumeMute, VolumeUp, XButton1, XButton2, Zoom
-```
-
-**Note 1:** An easy way get the name of a key is to use the [key tester](#client). This will open a small window that shows the name of the last pressed key.
-
-![](https://imgur.com/7zO7clu.png)
-
-**Note 2:** More information about these keys can be found [here](https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731.aspx).
-
-**Note 3:** Not every key in this list will work, it just won't cause the program to crash when reading the config.
 
