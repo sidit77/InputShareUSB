@@ -6,6 +6,7 @@ mod sender;
 mod ui;
 mod utils;
 
+use std::collections::VecDeque;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
@@ -63,7 +64,9 @@ pub fn main() {
 }
 
 #[instrument(skip(sink, controller))]
-async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str, info: bool) -> eyre::Result<()> {
+async fn connection(
+    sink: &ExtEventSink, mut controller: UnboundedReceiver<ConnectionCommand>, host: &str, info: bool, rate: f32
+) -> eyre::Result<()> {
     let wait = async {
         loop {
             match controller.recv().await {
@@ -126,7 +129,7 @@ async fn connection(sink: &ExtEventSink, mut controller: UnboundedReceiver<Conne
                 let msg = sender.write_packet()?;
                 debug_assert!(msg.len() <= connection.max_datagram_size().unwrap());
                 connection.send_datagram(Bytes::copy_from_slice(msg))?;
-                deadline = Some(Instant::now() + Duration::from_millis(10));
+                deadline = Some(Instant::now() + Duration::from_secs_f32(1.0 / rate));
                 //tracing::debug!("stats: {:#?}", connection.stats().path);
             }
         };
@@ -168,15 +171,27 @@ async fn connect(host: &str) -> eyre::Result<Connection> {
 
 #[instrument(skip(connection, sink))]
 async fn collect_network_info(connection: Connection, sink: ExtEventSink) {
+    let mut queue = VecDeque::new();
     while connection.close_reason().is_none() {
         let path = connection.stats().path;
+        queue.push_back((path.sent_packets, path.lost_packets));
+        while queue.len() > 20 {
+            queue.pop_front();
+        }
+        let loss = queue
+            .front()
+            .zip(queue.back())
+            .map(|((ot, ol), (nt, nl))| (nt - ot, nl - ol))
+            .map(|(t, l)| l as f64 / t.max(1) as f64)
+            .unwrap_or(0.0);
         let info = NetworkInfo {
             rtt: path.rtt,
             cwnd: path.cwnd,
             congestion_events: path.congestion_events,
             lost_packets: path.lost_packets,
             lost_bytes: path.lost_bytes,
-            sent_packets: path.sent_packets
+            sent_packets: path.sent_packets,
+            recent_loss_rate: loss
         };
         sink.add_idle_callback(move |data: &mut AppState| {
             data.network_info = Some(info);

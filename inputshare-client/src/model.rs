@@ -124,18 +124,13 @@ pub struct SearchResult {
 
 #[derive(Default, Debug, Clone, Data, Lens)]
 pub struct NetworkInfo {
-    /// Current best estimate of this connection's latency (round-trip-time)
     pub rtt: Duration,
-    /// Current congestion window of the connection
     pub cwnd: u64,
-    /// Congestion events on the connection
     pub congestion_events: u64,
-    /// The amount of packets lost on this path
     pub lost_packets: u64,
-    /// The amount of bytes lost on this path
     pub lost_bytes: u64,
-    /// The amount of packets sent on this path
-    pub sent_packets: u64
+    pub sent_packets: u64,
+    pub recent_loss_rate: f64
 }
 
 #[derive(Default, Debug, Clone, Data, Lens)]

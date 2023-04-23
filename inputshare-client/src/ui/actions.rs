@@ -21,8 +21,9 @@ pub fn initiate_connection(ctx: &mut EventCtx) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let host = data.config.host_address.clone();
             let info = data.config.show_network_info;
+            let rate = data.config.network_send_rate as f32;
             rt.runtime.spawn(async move {
-                let result = connection(&handle, receiver, &host, info).await;
+                let result = connection(&handle, receiver, &host, info, rate).await;
                 handle.add_rt_callback(|rt, data| {
                     rt.hook = None;
                     rt.connection = None;

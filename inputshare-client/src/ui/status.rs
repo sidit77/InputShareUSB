@@ -8,6 +8,7 @@ use crate::ui::actions::{initiate_connection, shutdown_server};
 #[rustfmt::skip]
 pub fn ui() -> impl Widget<AppState> + 'static {
     let status = Flex::column()
+        .with_child(Maybe::or_empty(info_ui).lens(AppState::network_info))
         .with_child(Label::dynamic(connection_status)
             .with_text_size(15.0))
         .with_child(Maybe::or_empty(side_ui).lens(side_lens()))
@@ -26,20 +27,11 @@ pub fn ui() -> impl Widget<AppState> + 'static {
         .with_flex_child(connect_button, 1.0)
         .with_child(Either::new(|data: &AppState, _| data.enable_shutdown, shutdown_button, SizedBox::empty()))
         .fix_width(100.0);
-    let info = Maybe::new(info_ui, ||Label::new("-"))
-        .lens(AppState::network_info)
-        .center()
-        .border(druid::theme::BORDER_DARK, 2.0)
-        .rounded(2.0)
-        .expand_height()
-        .fix_width(80.0)
-        .padding(Insets::new(0.0, 0.0, 3.0, 0.0));
     Flex::row()
-        .with_child(Either::new(|data: &AppState, _| data.config.show_network_info, info, SizedBox::empty()))
         .with_flex_child(status, 1.0)
         .with_spacer(3.0)
         .with_child(buttons)
-        .fix_height(70.0)
+        .fix_height(80.0)
 }
 
 #[rustfmt::skip]
@@ -54,7 +46,7 @@ fn side_ui() -> impl Widget<Side> + 'static {
 
 #[rustfmt::skip]
 fn info_ui() -> impl Widget<NetworkInfo> + 'static {
-    Label::dynamic(|info: &NetworkInfo, _| format!("{:?}\n{}\n{}", info.rtt, info.lost_packets, info.congestion_events))
+    Label::dynamic(|info: &NetworkInfo, _| format!("ping: {}ms loss: {}%", info.rtt.as_millis(), (info.recent_loss_rate * 100.0).round() as u32))
         .with_text_size(12.0)
 }
 
