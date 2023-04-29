@@ -1,6 +1,6 @@
 [package]
 name = "inputshare-server"
-version = "2.3.0"
+version = "3.0.0"
 authors = ["sidit77 <sidit77@gmail.com>"]
 edition = "2021"
 
