@@ -1,23 +1,28 @@
 mod configfs;
 mod receiver;
+mod util;
 
-use std::collections::HashMap;
+use std::future::pending;
+use std::num::NonZeroU8;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use clap::{arg, command, Parser};
-use mdns_sd::{ServiceDaemon, ServiceInfo};
-use quinn::{Connecting, ConnectionError, Endpoint, ServerConfig};
+use mdns_sd::Error;
+use quinn::{Connecting, ConnectionError, Endpoint};
 use tokio::process::Command;
-use tokio::select;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::time::sleep;
+use tokio::{select, spawn};
+use tracing::{instrument, Instrument, Span};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::receiver::{InputEvent, InputReceiver};
+use crate::util::{quit, self_signed_config, start_mdns};
 
 /// The server for inputshare
 #[derive(Parser, Debug)]
@@ -39,9 +44,14 @@ struct Args {
     /// Replace the actual HID emulation with a simple console logger
     /// Useful for debugging or testing on windows
     #[arg(short, long)]
-    console: bool
+    console: bool,
+
+    /// Disabled the mDNS service that is use for service discovery
+    #[arg(short, long)]
+    no_mdns: bool
 }
 
+#[instrument]
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::registry()
@@ -56,39 +66,18 @@ async fn main() -> Result<()> {
         .try_init()?;
 
     let args = Args::parse();
-
-    let mut server_config = {
-        let cert = rcgen::generate_simple_self_signed([String::from("inputshare")])?;
-        let key = rustls::PrivateKey(cert.serialize_private_key_der());
-        let cert = rustls::Certificate(cert.serialize_der()?);
-        ServerConfig::with_single_cert(vec![cert], key)?
-    };
-    server_config.concurrent_connections(1);
     let interface = args.interface.parse()?;
     tracing::debug!("Attempting to bind {}", interface);
-    let endpoint = Endpoint::server(server_config, interface)?;
+    let endpoint = Endpoint::server(self_signed_config(1)?, interface)?;
 
-    let mdns = ServiceDaemon::new()?;
-    {
-        let service_info = ServiceInfo::new(
-            "_inputshare._udp.local.",
-            "InputShare Server",
-            "inputshare.local.",
-            "",
-            interface.port(),
-            HashMap::new()
-        )?
-        .enable_addr_auto();
-        mdns.register(service_info)?;
-        let monitor = mdns.monitor()?;
-        tokio::spawn(async move {
-            while let Ok(event) = monitor.recv_async().await {
-                tracing::trace!("ndms daemon event: {:?}", &event);
-            }
-        });
-    }
+    let mdns = match args.no_mdns {
+        true => None,
+        false => start_mdns(interface)
+            .map_err(|err| tracing::error!("Failed to start mdns service: {}\n{}", err, err.backtrace()))
+            .ok()
+    };
 
-    tokio::spawn({
+    spawn({
         let endpoint = endpoint.clone();
         async move {
             quit().await;
@@ -97,51 +86,37 @@ async fn main() -> Result<()> {
         }
     });
 
-    server(endpoint, args).await?;
-    mdns.shutdown()?;
-    Ok(())
-}
-
-#[cfg(unix)]
-async fn quit() {
-    use tokio::signal::unix::*;
-    let mut quit = signal(SignalKind::quit()).expect("Could not register signal");
-    let mut interrupt = signal(SignalKind::interrupt()).expect("Could not register signal");
-    let mut terminate = signal(SignalKind::terminate()).expect("Could not register signal");
-    select! {
-        _ = quit.recv() => { }
-        _ = interrupt.recv() => { }
-        _ = terminate.recv() => { }
-    }
-}
-
-#[cfg(not(unix))]
-async fn quit() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Could not register signals")
-}
-
-async fn server(endpoint: Endpoint, args: Args) -> Result<()> {
     let processor = match args.console {
         true => log_input_processor().await?,
-        false => configfs_input_processor(args).await?
+        false => configfs_input_processor(args.mouse_tesselation_factor.try_into()?, args.auto_movement_timeout).await?
     };
+
     while let Some(conn) = endpoint.accept().await {
         let processor = processor.clone();
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(processor, conn).await {
-                tracing::error!("connection crashed with error:\n{:?}", e);
-            }
+        spawn(async move {
+            handle_connection(processor, conn)
+                .await
+                .unwrap_or_else(|err| tracing::error!("Connection crashed!\n{:?}", err))
         });
     }
-    tracing::info!("Stopping server");
+    drop(processor);
+    tracing::debug!("Stopping server");
+
+    if let Some(mdns) = mdns {
+        tracing::debug!("Stopping mDNS service");
+        while let Err(Error::Again) = mdns.shutdown() {
+            sleep(Duration::from_millis(50)).await;
+        }
+    }
     Ok(())
 }
 
-async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: Connecting) -> Result<()> {
-    let connection = connection.await?;
-    tracing::debug!("Got connection from {}", connection.remote_address());
+#[instrument(skip_all, fields(addrs = tracing::field::Empty))]
+async fn handle_connection(processor: UnboundedSender<InputEvent>, connecting: Connecting) -> Result<()> {
+    let connection = connecting.await?;
+    let span = Span::current();
+    span.record("addrs", connection.remote_address().to_string());
+    tracing::debug!("Established connection");
     let mut receiver = InputReceiver::new();
 
     loop {
@@ -158,7 +133,7 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
             Err(err) => return Err(err.into())
         };
         if let Some(packet) = receiver.process_packet(&msg)? {
-            debug_assert!(packet.len() <= connection.max_datagram_size().unwrap());
+            ensure!(packet.len() <= connection.max_datagram_size().unwrap());
             connection.send_datagram(Bytes::copy_from_slice(packet))?;
         }
         while let Some(event) = receiver.get_event() {
@@ -169,80 +144,88 @@ async fn handle_connection(processor: UnboundedSender<InputEvent>, connection: C
     }
 }
 
+#[instrument]
 async fn log_input_processor() -> Result<UnboundedSender<InputEvent>> {
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     tracing::debug!("Starting print processor");
-    tokio::spawn(async move {
-        while let Some(event) = receiver.recv().await {
-            tracing::info!("New input event: {:?}", event);
+    spawn(
+        async move {
+            while let Some(event) = receiver.recv().await {
+                tracing::info!("New input event: {:?}", event);
+            }
+            tracing::debug!("Stopping print processor");
         }
-        tracing::debug!("Stopping print processor");
-    });
+        .instrument(Span::current())
+    );
     Ok(sender)
 }
 
-async fn configfs_input_processor(args: Args) -> Result<UnboundedSender<InputEvent>> {
+#[instrument]
+async fn configfs_input_processor(tess_factor: NonZeroU8, timeout: Option<u64>) -> Result<UnboundedSender<InputEvent>> {
     use configfs::*;
     let mut keyboard = Keyboard::new().await?;
-    let mut mouse = Mouse::new(args.mouse_tesselation_factor.try_into()?).await?;
+    let mut mouse = Mouse::new(tess_factor).await?;
     let mut consumer_device = ConsumerDevice::new().await?;
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     tracing::debug!("Starting configfs processor");
-    tokio::spawn(async move {
-        let mut idle_move_x = -10;
-        loop {
-            let timeout = args.auto_movement_timeout;
-            let timeout = async move {
-                match timeout {
-                    Some(timeout) => tokio::time::sleep(Duration::from_secs(timeout)).await,
-                    None => std::future::pending().await
+    spawn(
+        async move {
+            let mut idle_move_x = -10;
+            loop {
+                let timeout = async move {
+                    match timeout {
+                        Some(timeout) => sleep(Duration::from_secs(timeout)).await,
+                        None => pending().await
+                    };
                 };
-            };
-            select! {
-                event = receiver.recv() => match event {
-                    Some(event) => {
-                        let result = match event {
-                            InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16).await,
-                            InputEvent::KeyPress(key) => keyboard.press_key(key).await,
-                            InputEvent::KeyRelease(key) => keyboard.release_key(key).await,
-                            InputEvent::MouseButtonPress(button) => mouse.press_button(button).await,
-                            InputEvent::MouseButtonRelease(button) => mouse.release_button(button).await,
-                            InputEvent::ConsumerDevicePress(button) => consumer_device.press_key(button).await,
-                            InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button).await,
-                            InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount).await,
-                            InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount).await,
-                            InputEvent::Reset => {
-                                async {
-                                    keyboard.reset().await?;
-                                    mouse.reset().await?;
-                                    consumer_device.reset().await?;
-                                    Ok(())
-                                }
-                                .await
-                            },
-                            InputEvent::Shutdown => run_command("shutdown", &["-r", "now"]).await,
-                        };
-                        if let Err(err) = result {
-                            tracing::error!("Could not write hid command: {}", err);
-                            break;
-                        }
+                select! {
+                    event = receiver.recv() => match event {
+                        Some(event) => {
+                            let result = match event {
+                                InputEvent::MouseMove(x, y) => mouse.move_by(x as i16, y as i16).await,
+                                InputEvent::KeyPress(key) => keyboard.press_key(key).await,
+                                InputEvent::KeyRelease(key) => keyboard.release_key(key).await,
+                                InputEvent::MouseButtonPress(button) => mouse.press_button(button).await,
+                                InputEvent::MouseButtonRelease(button) => mouse.release_button(button).await,
+                                InputEvent::ConsumerDevicePress(button) => consumer_device.press_key(button).await,
+                                InputEvent::ConsumerDeviceRelease(button) => consumer_device.release_key(button).await,
+                                InputEvent::HorizontalScrolling(amount) => mouse.scroll_horizontal(amount).await,
+                                InputEvent::VerticalScrolling(amount) => mouse.scroll_vertical(amount).await,
+                                InputEvent::Reset => {
+                                    async {
+                                        keyboard.reset().await?;
+                                        mouse.reset().await?;
+                                        consumer_device.reset().await?;
+                                        Ok(())
+                                    }
+                                    .await
+                                },
+                                InputEvent::Shutdown => run_command("shutdown", &["-r", "now"]).await,
+                            };
+                            if let Err(err) = result {
+                                tracing::error!("Could not write hid command: {}", err);
+                                break;
+                            }
+                        },
+                        None => break
                     },
-                    None => break
-                },
-                _ = timeout => {
-                    if let Err(err) = mouse.move_by(idle_move_x, 0).await {
-                         tracing::error!("Could not write hid command: {}", err);
-                         break;
+                    _ = timeout => {
+                        if let Err(err) = mouse.move_by(idle_move_x, 0).await {
+                             tracing::error!("Could not write hid command: {}", err);
+                             break;
+                        }
+                        idle_move_x *= -1;
                     }
-                    idle_move_x *= -1;
-                }
-            };
+                };
+            }
+            tracing::debug!("Stopping configfs processor");
         }
-        tracing::debug!("Stopping configfs processor");
-    });
+        .instrument(Span::current())
+    );
     Ok(sender)
 }
 
+#[instrument]
 async fn run_command(command: &str, args: &[&str]) -> Result<()> {
     let output = Command::new(command).args(args).output().await?;
     if output.status.success() && output.stderr.is_empty() {
