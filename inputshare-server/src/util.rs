@@ -47,7 +47,7 @@ pub async fn quit() {
     let mut quit = signal(SignalKind::quit()).expect("Could not register signal");
     let mut interrupt = signal(SignalKind::interrupt()).expect("Could not register signal");
     let mut terminate = signal(SignalKind::terminate()).expect("Could not register signal");
-    select! {
+    tokio::select! {
         _ = quit.recv() => { }
         _ = interrupt.recv() => { }
         _ = terminate.recv() => { }

@@ -992,7 +992,7 @@ dependencies = [
 
 [[package]]
 name = "inputshare-client"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "byteorder",
  "bytes",
@@ -1027,7 +1027,7 @@ dependencies = [
 
 [[package]]
 name = "inputshare-server"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.0.2",
