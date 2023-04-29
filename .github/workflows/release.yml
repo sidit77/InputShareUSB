@@ -22,24 +22,26 @@ jobs:
             bin: inputshare-client
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
           target: ${{ matrix.target }}
+      
+      - name: Install Cross
+        if: runner.os == 'Linux'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+        
+      - name: Build binary (Cargo)
+        if: runner.os != 'Linux'
+        run: cargo build --release --locked --target=${{ matrix.target }} --bin=${{ matrix.bin }} --color=always --verbose
 
-      - name: Build binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --locked --target=${{ matrix.target }} --bin=${{ matrix.bin }} --color=always --verbose
-          use-cross: ${{ runner.os == 'Linux' }}
+      - name: Build binary (Cross)
+        if: runner.os == 'Linux'
+        run: cross build --release --locked --target=${{ matrix.target }} --bin=${{ matrix.bin }} --color=always --verbose
 
       - name: Package (*nix)
         if: runner.os != 'Windows'
