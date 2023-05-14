@@ -189,7 +189,10 @@ Now you can enable your new server using:
 sudo systemctl enable inputshare_server.service
 ```
 
-
+```
+sudo apt install python git clang
+cargo install ldproxy
+```
 
 ## License
 

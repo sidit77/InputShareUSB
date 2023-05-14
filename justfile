@@ -27,3 +27,6 @@ upload-binary-wsl:
     scp ~/InputShareUSB/target/{{target}}/release/inputshare-server {{remote}}
 
 build-upload-wsl: build-server-wsl upload-binary-wsl
+
+flash-esp: sync-wsl
+    cd ~/InputShareUSB/inputshare-esp32 && cargo run

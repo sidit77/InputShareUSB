@@ -5,6 +5,9 @@ members = [
     "lib/inputshare-common",
     "lib/yawi",
 ]
+exclude = [
+    "inputshare-esp32"
+]
 
 [profile.release]
 lto = true
