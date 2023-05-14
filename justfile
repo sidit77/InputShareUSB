@@ -29,4 +29,4 @@ upload-binary-wsl:
 build-upload-wsl: build-server-wsl upload-binary-wsl
 
 flash-esp: sync-wsl
-    cd ~/InputShareUSB/inputshare-esp32 && cargo run
+    cd ~/InputShareUSB && cargo +nightly run --bin inputshare-esp32 --target riscv32imc-esp-espidf --profile release-esp
